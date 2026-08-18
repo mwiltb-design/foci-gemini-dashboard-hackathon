@@ -34,7 +34,7 @@ function runtimeLabel(plugin: PluginSummary): string {
 }
 
 export function PluginManager({
-  plugins, loading, registryError, workspaceSourceEnabled, localPreviewEnabled, preferredPluginId,
+  plugins, loading, registryError, workspaceSourceEnabled: _workspaceSourceEnabled, localPreviewEnabled, preferredPluginId,
   onReview, onInstall, onSetEnabled, onSetAgentAccess, onRollback, onRemove, onOpen, onCreateWithPi,
 }: PluginManagerProps) {
   const [url, setUrl] = useState(localPreviewEnabled ? 'local:repository-hello' : '')
@@ -251,9 +251,14 @@ export function PluginManager({
               <span className="plugin-add-icon">⌁</span>
               <div><h3>Install a repository as-is</h3><p>For a static plugin whose code you already trust. The exact commit is reviewed before anything is installed.</p></div>
               <form className="plugin-repository-form" onSubmit={reviewRepository}>
-                <label><span>GitHub URL or workspace repository</span><input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://github.com/owner/plugin" /></label>
-                {workspaceSourceEnabled && <small>Pi-built plugin example: <code>workspace:plugins/my-plugin</code></small>}
-                {localPreviewEnabled && <small>Acceptance fixture: <code>local:repository-hello</code></small>}
+                <label><span>Plugin Source URL or Identifier</span><input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="workspace:plugins/my-plugin, local:my-plugin, or https://github.com/..." /></label>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted, #94a3b8)', margin: '4px 0 10px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span><strong>Supported Sources:</strong></span>
+                  <span>• <code>workspace:plugins/&lt;id&gt;</code> — Inside active workspace (<code>Documents/PiWorkspace/plugins/&lt;id&gt;</code>)</span>
+                  <span>• <code>local:&lt;id&gt;</code> — Inside local plugins folder (<code>~/.pi/agent/plugins/&lt;id&gt;</code> or bundled)</span>
+                  <span>• <code>https://github.com/owner/repo</code> — Public Git repository</span>
+                  <span style={{ color: 'var(--yellow, #f59e0b)', marginTop: '2px' }}>🔒 Note: Relative paths with <code>..</code> outside designated directories are blocked for security.</span>
+                </div>
                 <button className="button" type="submit" disabled={busy !== '' || !url.trim()}>{busy === 'review' ? 'Reviewing…' : 'Review exact commit'}</button>
               </form>
             </section>

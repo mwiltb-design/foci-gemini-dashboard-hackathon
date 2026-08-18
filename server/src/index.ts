@@ -34,6 +34,9 @@ import type { BrowserCommand, RpcEvent, ServerMessage } from './types.js'
 const port = Number(process.env.PORT ?? 4317)
 const host = process.env.HOST ?? '0.0.0.0'
 const defaultHomeAgentDir = resolve(homedir(), '.pi/agent')
+const defaultDashboardDataDir = resolve(homedir(), '.pi-dashboard')
+try { mkdirSync(defaultDashboardDataDir, { recursive: true }) } catch {}
+
 const defaultWorkspace = resolve(homedir(), 'Documents/PiWorkspace')
 const workspace = process.env.PI_DASHBOARD_WORKSPACE ?? defaultWorkspace
 
@@ -52,12 +55,12 @@ try {
 const sessionRoot = process.env.PI_SESSION_ROOT ?? resolve(defaultHomeAgentDir, 'sessions')
 const agentDir = process.env.PI_AGENT_DIR ?? defaultHomeAgentDir
 const rpcSessionDir = process.env.PI_RPC_SESSION_DIR
-const activityPath = process.env.PI_DASHBOARD_ACTIVITY_PATH ?? resolve(defaultHomeAgentDir, 'dashboard/activity.jsonl')
+const activityPath = process.env.PI_DASHBOARD_ACTIVITY_PATH ?? resolve(defaultDashboardDataDir, 'activity.jsonl')
 const workspaceKey = createHash('sha256').update(workspace).digest('hex').slice(0, 16)
-const boardPath = process.env.PI_DASHBOARD_BOARD_PATH ?? resolve(defaultHomeAgentDir, `dashboard/boards/${workspaceKey}.json`)
-const cronPath = process.env.PI_DASHBOARD_CRON_PATH ?? resolve(defaultHomeAgentDir, `dashboard/cron/${workspaceKey}.json`)
-const sessionArchivePath = process.env.PI_DASHBOARD_SESSION_ARCHIVE_PATH ?? resolve(defaultHomeAgentDir, `dashboard/sessions/${workspaceKey}.json`)
-const runtimeInfoPath = process.env.PI_DASHBOARD_RUNTIME_INFO_PATH ?? resolve(defaultHomeAgentDir, 'dashboard/runtime-tools.json')
+const boardPath = process.env.PI_DASHBOARD_BOARD_PATH ?? resolve(defaultDashboardDataDir, `boards/${workspaceKey}.json`)
+const cronPath = process.env.PI_DASHBOARD_CRON_PATH ?? resolve(defaultDashboardDataDir, `cron/${workspaceKey}.json`)
+const sessionArchivePath = process.env.PI_DASHBOARD_SESSION_ARCHIVE_PATH ?? resolve(defaultDashboardDataDir, `sessions/${workspaceKey}.json`)
+const runtimeInfoPath = process.env.PI_DASHBOARD_RUNTIME_INFO_PATH ?? resolve(defaultDashboardDataDir, 'runtime-tools.json')
 const runtimeInfoExtension = process.env.PI_DASHBOARD_RUNTIME_INFO_EXTENSION ?? resolve(process.cwd(), 'extensions/dashboard-runtime-info.ts')
 const curatedMemoryExtension = process.env.PI_DASHBOARD_CURATED_MEMORY_EXTENSION ?? resolve(process.cwd(), 'extensions/curated-memory.ts')
 const memoryCheckpointExtension = process.env.PI_DASHBOARD_MEMORY_CHECKPOINT_EXTENSION ?? resolve(process.cwd(), 'extensions/memory-checkpoint.ts')
@@ -65,12 +68,15 @@ const pluginToolsExtension = process.env.PI_DASHBOARD_PLUGIN_TOOLS_EXTENSION ?? 
 const workersExtension = process.env.PI_DASHBOARD_WORKERS_EXTENSION ?? resolve(process.cwd(), 'extensions/dashboard-workers.ts')
 const dashboardPluginAuthoringSkill = process.env.PI_DASHBOARD_PLUGIN_AUTHORING_SKILL_PATH ?? resolve(process.cwd(), 'skills/dashboard-plugin-authoring')
 const dashboardReferenceSkill = process.env.PI_DASHBOARD_REFERENCE_SKILL_PATH ?? resolve(process.cwd(), 'skills/dashboard-reference')
-const pluginCodeRoot = process.env.PI_DASHBOARD_PLUGIN_CODE_ROOT ?? resolve(process.cwd(), '../plugins')
-const pluginStateRoot = process.env.PI_DASHBOARD_PLUGIN_STATE_ROOT ?? resolve(defaultHomeAgentDir, 'dashboard/plugins')
+const repoPluginDir = resolve(import.meta.dirname ?? process.cwd(), '../../plugins')
+const pluginCodeRoot = process.env.PI_DASHBOARD_PLUGIN_CODE_ROOT ?? (existsSync(repoPluginDir) ? repoPluginDir : resolve(process.cwd(), 'plugins'))
+const pluginStateRoot = process.env.PI_DASHBOARD_PLUGIN_STATE_ROOT ?? resolve(defaultDashboardDataDir, 'plugin-data')
 const pluginRuntimeSocketRoot = process.env.PI_DASHBOARD_PLUGIN_RUNTIME_SOCKET_ROOT ?? resolve(tmpdir(), 'pi-dashboard-plugins')
-const pluginLocalRepositoryRoot = process.env.PI_DASHBOARD_PLUGIN_LOCAL_REPOSITORY_ROOT
+const defaultCustomPluginRoot = resolve(defaultDashboardDataDir, 'plugins')
+try { mkdirSync(defaultCustomPluginRoot, { recursive: true }) } catch {}
+const pluginLocalRepositoryRoot = process.env.PI_DASHBOARD_PLUGIN_LOCAL_REPOSITORY_ROOT ?? defaultCustomPluginRoot
 const terminalSocketPath = process.env.PI_DASHBOARD_TERMINAL_SOCKET ?? resolve(tmpdir(), 'pi-dashboard-terminal/terminal.sock')
-const workerStorePath = process.env.PI_DASHBOARD_WORKER_STORE_PATH ?? resolve(defaultHomeAgentDir, `dashboard/workers/${workspaceKey}.json`)
+const workerStorePath = process.env.PI_DASHBOARD_WORKER_STORE_PATH ?? resolve(defaultDashboardDataDir, `workers/${workspaceKey}.json`)
 const previewPort = Number(process.env.PI_DASHBOARD_PREVIEW_PORT ?? 4318)
 const previewPublicPort = Number(process.env.PI_DASHBOARD_PREVIEW_PUBLIC_PORT ?? 4174)
 const previewAllowedOrigins = new Set(
@@ -102,9 +108,9 @@ const files = new FileService(workspace)
 const git = new GitService(workspace)
 const skills = new SkillService(workspace, agentDir)
 const system = new SystemService(workspace, agentDir)
-const onboarding = new OnboardingService(workspace, agentDir)
+const onboarding = new OnboardingService(workspace, agentDir, defaultDashboardDataDir)
 const tools = new ToolService(runtimeInfoPath)
-const plugins = new PluginService({ bundledRoot: pluginCodeRoot, stateRoot: pluginStateRoot, workspaceRoot: workspace, runtimeSocketRoot: pluginRuntimeSocketRoot, assetCapability: pluginAssetCapability, ...(pluginLocalRepositoryRoot ? { localRepositoryRoot: pluginLocalRepositoryRoot } : {}) })
+const plugins = new PluginService({ bundledRoot: pluginCodeRoot, stateRoot: pluginStateRoot, workspaceRoot: workspace, runtimeSocketRoot: pluginRuntimeSocketRoot, assetCapability: pluginAssetCapability, localRepositoryRoot: pluginLocalRepositoryRoot })
 const activity = new ActivityStore(activityPath)
 const providerLogin = new ProviderLoginSession()
 const workerBounds = {

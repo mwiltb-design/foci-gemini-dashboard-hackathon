@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "id": "notes",
+  "name": "Shared Notes",
+  "version": "0.1.0",
+  "description": "A tiny persistent notes list that can be used in the dashboard and, with separate approval, by Pi.",
+  "dashboardVersion": ">=0.9.0-beta.1 <1.0.0",
+  "entry": {
+    "frontend": "index.html",
+    "backend": {
+      "protocol": "host-module",
+      "module": "server.ts"
+    }
+  },
+  "agent": {
+    "skills": [
+      {
+        "name": "shared-notes-overview",
+        "description": "Explains how Shared Notes works and how its separate PI access grants affect available actions.",
+        "path": "skills/shared-notes-overview"
+      },
+      {
+        "name": "shared-notes-review",
+        "description": "Reviews notes saved in Shared Notes when PI read access is granted.",
+        "path": "skills/shared-notes-review",
+        "access": "read"
+      }
+    ],
+    "tools": [
+      {
+        "name": "list_notes",
+        "label": "List notes",
+        "description": "List the notes currently saved in the Shared Notes plugin.",
+        "access": "read",
+        "method": "GET",
+        "path": "/agent/notes",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "add_note",
+        "label": "Add a note",
+        "description": "Add a short note to the Shared Notes plugin.",
+        "access": "write",
+        "method": "POST",
+        "path": "/agent/notes",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "description": "The note text, up to 240 characters."
+            }
+          },
+          "required": ["text"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "delete_note",
+        "label": "Delete a note",
+        "description": "Delete one Shared Notes item by its ID.",
+        "access": "write",
+        "method": "DELETE",
+        "path": "/agent/notes",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "The exact note ID returned by List notes."
+            }
+          },
+          "required": ["id"],
+          "additionalProperties": false
+        }
+      }
+    ]
+  },
+  "navigation": {
+    "label": "Shared Notes",
+    "icon": "✎"
+  },
+  "permissions": [
+    "plugin-data:read",
+    "plugin-data:write"
+  ]
+}

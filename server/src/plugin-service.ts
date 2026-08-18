@@ -120,7 +120,11 @@ export class PluginError extends Error {
 }
 
 function safeRelativePath(value: unknown, field: string): string {
-  if (!isSafePluginPath(value)) throw new PluginError(`Plugin ${field} must be a safe relative path`)
+  if (!isSafePluginPath(value)) {
+    throw new PluginError(
+      `Plugin ${field} must be a safe relative path without '..' or absolute path segments (e.g. workspace:plugins/my-plugin or local:my-plugin). Path traversal outside the designated directory is blocked for security.`
+    )
+  }
   return value
 }
 
@@ -640,26 +644,52 @@ export class PluginService {
       return { cloneUrl: `${canonical}.git`, displayUrl: canonical }
     }
     const local = url.match(LOCAL_REPOSITORY)
-    if (local && this.options.localRepositoryRoot) {
+    if (local) {
       const safePath = safeRelativePath(local[1], 'local repository')
-      const root = await realpath(this.options.localRepositoryRoot)
-      let repository: string
-      try { repository = await realpath(resolve(root, safePath)) } catch { throw new PluginError('Local preview repository was not found', 404) }
-      const escaped = relative(root, repository)
-      if (escaped === '..' || escaped.startsWith(`..${sep}`) || isAbsolute(escaped)) throw new PluginError('Local preview repository is outside the disposable project', 403)
+      let repository: string | null = null
+
+      if (this.options.localRepositoryRoot) {
+        try {
+          const root = await realpath(this.options.localRepositoryRoot)
+          const candidate = await realpath(resolve(root, safePath))
+          const escaped = relative(root, candidate)
+          if (escaped !== '..' && !escaped.startsWith(`..${sep}`) && !isAbsolute(escaped)) {
+            repository = candidate
+          }
+        } catch {}
+      }
+
+      if (!repository && this.options.bundledRoot) {
+        try {
+          const root = await realpath(this.options.bundledRoot)
+          const candidate = await realpath(resolve(root, safePath))
+          const escaped = relative(root, candidate)
+          if (escaped !== '..' && !escaped.startsWith(`..${sep}`) && !isAbsolute(escaped)) {
+            repository = candidate
+          }
+        } catch {}
+      }
+
+      if (!repository) {
+        throw new PluginError(`Local plugin repository '${safePath}' was not found in local plugins directory.`, 404)
+      }
       return { cloneUrl: repository, displayUrl: `local:${safePath}` }
     }
+
     const workspaceRepository = url.match(WORKSPACE_REPOSITORY)
-    if (workspaceRepository && this.options.workspaceRoot) {
+    if (workspaceRepository) {
+      if (!this.options.workspaceRoot) {
+        throw new PluginError('Workspace repository root is not configured.', 400)
+      }
       const safePath = safeRelativePath(workspaceRepository[1], 'workspace repository')
       const root = await realpath(this.options.workspaceRoot)
       let repository: string
-      try { repository = await realpath(resolve(root, safePath)) } catch { throw new PluginError('Workspace repository was not found', 404) }
+      try { repository = await realpath(resolve(root, safePath)) } catch { throw new PluginError(`Workspace repository '${safePath}' was not found in active workspace (${this.options.workspaceRoot})`, 404) }
       const escaped = relative(root, repository)
-      if (escaped === '..' || escaped.startsWith(`..${sep}`) || isAbsolute(escaped)) throw new PluginError('Workspace repository is outside the project', 403)
+      if (escaped === '..' || escaped.startsWith(`..${sep}`) || isAbsolute(escaped)) throw new PluginError('Workspace repository is outside the active workspace directory', 403)
       return { cloneUrl: repository, displayUrl: `workspace:${safePath}` }
     }
-    throw new PluginError('Enter a public GitHub URL or a workspace: path to a plugin repository.')
+    throw new PluginError('Enter a public GitHub URL (https://github.com/...), a workspace path (workspace:plugins/my-plugin), or a local plugin path (local:my-plugin).')
   }
 
   private async expireReviews(): Promise<void> {

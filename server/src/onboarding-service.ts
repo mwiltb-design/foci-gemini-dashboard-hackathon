@@ -52,8 +52,8 @@ export class OnboardingService {
   private readonly userProfilePath: string
   private readonly globalMemoryPath: string
 
-  constructor(private readonly workspace: string, agentDir: string) {
-    this.statePath = join(agentDir, 'dashboard', 'onboarding', 'state.json')
+  constructor(private readonly workspace: string, agentDir: string, dataDir?: string) {
+    this.statePath = join(dataDir ?? join(agentDir, 'dashboard'), 'onboarding', 'state.json')
     this.userProfilePath = join(agentDir, 'USER.md')
     this.globalMemoryPath = join(agentDir, 'MEMORY.md')
   }
