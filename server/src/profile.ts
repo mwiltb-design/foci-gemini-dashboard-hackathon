@@ -1,6 +1,5 @@
 export const DASHBOARD_FEATURES = ['chat', 'files', 'files-editor', 'terminal', 'sessions', 'settings', 'skills', 'workers', 'plugins'] as const
-type RetiredBuiltinFeature = 'preview' | 'cron' | 'board'
-export type DashboardFeature = typeof DASHBOARD_FEATURES[number] | RetiredBuiltinFeature
+export type DashboardFeature = typeof DASHBOARD_FEATURES[number]
 export type DashboardProfileName = 'core' | 'workbench'
 
 const CORE_FEATURES: DashboardFeature[] = ['chat', 'files', 'files-editor', 'sessions', 'skills', 'settings', 'plugins']

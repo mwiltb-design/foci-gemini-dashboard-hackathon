@@ -9,8 +9,6 @@ import { WebSocket, WebSocketServer } from 'ws'
 import { ActivityStore, type ActivityCategory, type ActivitySeverity } from './activity-store.js'
 import { DashboardAuth } from './auth.js'
 import { terminalCapabilityStatus, workersCapabilityStatus } from './capability-status.js'
-import { BOARD_RUN_MODES, MANUAL_CARD_ACTIONS, BoardError, BoardService, type BoardRunMode, type ManualCardAction } from './board-service.js'
-import { CronError, CronService, type CronJob, type CronRun } from './cron-service.js'
 import { FileAccessError, FileService } from './file-service.js'
 import { GitService } from './git-service.js'
 import { OnboardingError, OnboardingService } from './onboarding-service.js'
@@ -39,6 +37,7 @@ try { mkdirSync(defaultDashboardDataDir, { recursive: true }) } catch {}
 
 const defaultWorkspace = resolve(homedir(), 'Documents/PiWorkspace')
 const workspace = process.env.PI_DASHBOARD_WORKSPACE ?? defaultWorkspace
+const workspaceKey = createHash('sha256').update(workspace).digest('hex').slice(0, 16)
 
 // Auto-initialize clean workspace folder with starter MEMORY.md
 try {
@@ -56,9 +55,6 @@ const sessionRoot = process.env.PI_SESSION_ROOT ?? resolve(defaultHomeAgentDir, 
 const agentDir = process.env.PI_AGENT_DIR ?? defaultHomeAgentDir
 const rpcSessionDir = process.env.PI_RPC_SESSION_DIR
 const activityPath = process.env.PI_DASHBOARD_ACTIVITY_PATH ?? resolve(defaultDashboardDataDir, 'activity.jsonl')
-const workspaceKey = createHash('sha256').update(workspace).digest('hex').slice(0, 16)
-const boardPath = process.env.PI_DASHBOARD_BOARD_PATH ?? resolve(defaultDashboardDataDir, `boards/${workspaceKey}.json`)
-const cronPath = process.env.PI_DASHBOARD_CRON_PATH ?? resolve(defaultDashboardDataDir, `cron/${workspaceKey}.json`)
 const sessionArchivePath = process.env.PI_DASHBOARD_SESSION_ARCHIVE_PATH ?? resolve(defaultDashboardDataDir, `sessions/${workspaceKey}.json`)
 const runtimeInfoPath = process.env.PI_DASHBOARD_RUNTIME_INFO_PATH ?? resolve(defaultDashboardDataDir, 'runtime-tools.json')
 const runtimeInfoExtension = process.env.PI_DASHBOARD_RUNTIME_INFO_EXTENSION ?? resolve(process.cwd(), 'extensions/dashboard-runtime-info.ts')
@@ -77,12 +73,6 @@ try { mkdirSync(defaultCustomPluginRoot, { recursive: true }) } catch {}
 const pluginLocalRepositoryRoot = process.env.PI_DASHBOARD_PLUGIN_LOCAL_REPOSITORY_ROOT ?? defaultCustomPluginRoot
 const terminalSocketPath = process.env.PI_DASHBOARD_TERMINAL_SOCKET ?? resolve(tmpdir(), 'pi-dashboard-terminal/terminal.sock')
 const workerStorePath = process.env.PI_DASHBOARD_WORKER_STORE_PATH ?? resolve(defaultDashboardDataDir, `workers/${workspaceKey}.json`)
-const previewPort = Number(process.env.PI_DASHBOARD_PREVIEW_PORT ?? 4318)
-const previewPublicPort = Number(process.env.PI_DASHBOARD_PREVIEW_PUBLIC_PORT ?? 4174)
-const previewAllowedOrigins = new Set(
-  (process.env.PI_DASHBOARD_PREVIEW_ALLOWED_ORIGINS ?? `http://localhost:${previewPublicPort},http://127.0.0.1:${previewPublicPort}`)
-    .split(',').map((origin) => origin.trim()).filter(Boolean),
-)
 const allowedOrigins = new Set(
   (process.env.PI_DASHBOARD_ALLOWED_ORIGINS ?? 'http://localhost:5173,http://127.0.0.1:5173,http://localhost:5190,http://127.0.0.1:5190,http://localhost:5184,http://127.0.0.1:5184')
     .split(',')
@@ -102,8 +92,6 @@ const rpcArgs = ['--mode', 'rpc', '--continue', '--name', 'Pi Dashboard', '--ext
 const rpc = new PiRpcProcess({ cwd: workspace, args: rpcArgs, env: { PI_DASHBOARD_WORKER_INTERNAL_TOKEN: workerInternalToken } })
 const sessions = new SessionCatalog(sessionRoot, workspace)
 const sessionArchive = new SessionArchiveService(sessionArchivePath)
-const board = new BoardService(boardPath, workspace)
-const cron = new CronService(cronPath, workspace)
 const files = new FileService(workspace)
 const git = new GitService(workspace)
 const skills = new SkillService(workspace, agentDir)
@@ -137,27 +125,19 @@ await Promise.all([
   sessionArchive.initialize(),
   system.initialize(),
   ...(enabledFeatures.has('plugins') ? [plugins.initialize()] : []),
-  ...(enabledFeatures.has('board') ? [board.initialize()] : []),
-  ...(enabledFeatures.has('cron') ? [cron.initialize()] : []),
   ...(enabledFeatures.has('workers') ? [workers.initialize()] : []),
 ])
 
 const clients = new Set<WebSocket>()
 const toolStartTimes = new Map<string, number>()
-const boardToolInputs = new Map<string, Record<string, unknown>>()
 let currentSessionId: string | undefined
 let currentSessionFile: string | undefined
 let currentRunId: string | undefined
 let managementChain = Promise.resolve()
-let boardEventChain = Promise.resolve()
 function positiveLimit(value: string | undefined, fallback: number, minimum: number): number {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? Math.max(minimum, Math.floor(parsed)) : fallback
 }
-const boardTurnLimit = positiveLimit(process.env.PI_DASHBOARD_BOARD_TURN_LIMIT, 12, 1)
-const boardRunTimeoutMs = positiveLimit(process.env.PI_DASHBOARD_BOARD_RUN_TIMEOUT_MS, 30 * 60_000, 60_000)
-interface ActiveBoardRun { cardId: string; sessionId: string; turns: number; timer: NodeJS.Timeout; rpc: PiRpcProcess }
-let activeBoardRun: ActiveBoardRun | undefined
 
 function encode(message: ServerMessage): string {
   return JSON.stringify(message)
@@ -173,23 +153,6 @@ function broadcast(message: ServerMessage): void {
     if (client.readyState === WebSocket.OPEN) client.send(payload)
   }
 }
-
-if (enabledFeatures.has('cron')) cron.on('changed', () => broadcast({ type: 'cron_changed' }))
-if (enabledFeatures.has('cron')) cron.on('schedulerError', (error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error)
-  record({ category: 'error', type: 'cron_scheduler_error', severity: 'error', summary: message, sessionId: currentSessionId })
-  broadcast({ type: 'error', message: `Scheduled job failed: ${message}` })
-})
-if (enabledFeatures.has('cron')) cron.on('runFinished', ({ job, run }: { job: CronJob; run: CronRun }) => {
-  const failed = run.status === 'error' || run.status === 'timed-out'
-  record({
-    category: failed ? 'error' : 'cron', type: 'cron_run_finished', severity: failed ? 'error' : 'info',
-    summary: `${run.status === 'success' ? 'Completed' : 'Finished'} scheduled job ${job.name}: ${run.status}`,
-    sessionId: run.sessionId, data: { jobId: job.id, runId: run.id, status: run.status },
-  })
-  broadcast({ type: 'sessions_changed' })
-  if (job.access === 'workspace-write') broadcast({ type: 'workspace_changed' })
-})
 
 function record(input: Parameters<ActivityStore['record']>[0]): void {
   activity.record(input)
@@ -319,8 +282,6 @@ async function systemSnapshot(): Promise<Record<string, unknown>> {
     sessions.list(),
     stat(terminalSocketPath).then((info) => info.isSocket()).catch(() => false),
   ])
-  const boardSnapshot = board.get()
-  const cronSnapshot = cron.get()
   const rawState = rpcState as Record<string, unknown>
   const rpcError = typeof rawState.error === 'string' ? rawState.error : ('error' in modelResult ? modelResult.error : undefined)
   const rawModel = rawState.model && typeof rawState.model === 'object' ? rawState.model as Record<string, unknown> : undefined
@@ -374,18 +335,15 @@ async function systemSnapshot(): Promise<Record<string, unknown>> {
       git: { available: gitStatus.available, clean: gitStatus.clean, branch: gitStatus.branch, commit: gitStatus.commit },
     },
     persistence: {
-      sessionRoot, activityPath, boardPath, cronPath,
+      sessionRoot, activityPath,
       sessions: sessionList.length,
-      boardCards: boardSnapshot.cards.length,
-      cronJobs: cronSnapshot.jobs.length,
-      cronRuns: cronSnapshot.runs.length,
     },
     recentErrors: activity.query({ category: 'error', limit: 5 }),
     security: {
       authenticationEnabled: auth.enabled,
       frontendExpectedOnLocalhost: originsLimitedToLocalhost,
-      backendNetworkScope: 'Compose internal network',
-      processIsolation: 'Shared dashboard container',
+      backendNetworkScope: 'Native local desktop',
+      processIsolation: 'Native desktop environment',
       workspaceIsolationEnforced: false,
       allowedOrigins: [...allowedOrigins],
     },
@@ -410,243 +368,8 @@ function queueManagement(task: () => Promise<void>): Promise<void> {
   return result
 }
 
-async function finishBoardRun(run = activeBoardRun): Promise<void> {
-  if (!run) return
-  clearTimeout(run.timer)
-  if (activeBoardRun === run) activeBoardRun = undefined
-  boardToolInputs.clear()
-  await run.rpc.stop()
-}
-
-async function updateBoardRun(cardId: string, status: Parameters<BoardService['setPiState']>[1]['status'], message: string, sessionId: string, turns?: number): Promise<void> {
-  await board.setPiState(cardId, { status, message, sessionId, ...(turns === undefined ? {} : { turnCount: turns }) }, sessionId)
-  broadcast({ type: 'board_changed' })
-  record({
-    category: status === 'failed' || status === 'blocked' ? 'error' : 'board',
-    type: `board_project_${status.replaceAll('-', '_')}`,
-    severity: status === 'failed' || status === 'blocked' ? 'warning' : 'info',
-    summary: message, sessionId, data: { cardId, status },
-  })
-}
-
-function beginBoardRun(runner: PiRpcProcess, cardId: string, sessionId: string): void {
-  if (activeBoardRun) throw new BoardError('Pi is already working on another Project Board card', 409)
-  const timer = setTimeout(() => {
-    const run = activeBoardRun
-    if (!run || run.cardId !== cardId || run.sessionId !== sessionId) return
-    void run.rpc.request({ type: 'abort' }).catch(() => undefined)
-    boardEventChain = boardEventChain.then(async () => {
-      await updateBoardRun(cardId, 'paused', 'Pi reached the project runtime limit. Review its progress and resume when ready.', sessionId, run.turns)
-      await finishBoardRun(run)
-    }).catch((error: Error) => broadcast({ type: 'error', message: error.message }))
-  }, boardRunTimeoutMs)
-  activeBoardRun = { cardId, sessionId, turns: 0, timer, rpc: runner }
-}
-
-function projectPrompt(card: NonNullable<ReturnType<BoardService['getCard']>>, mode: BoardRunMode): string {
-  const details = card.description || '(No additional description was provided.)'
-  const tags = card.tags.length ? card.tags.join(', ') : '(none)'
-  const instruction = mode === 'user-plan'
-    ? `THE USER OWNS IMPLEMENTATION. Inspect the project and write a detailed, practical step-by-step plan the user can follow. Do not modify files. When ready, call dashboard_project_status with status "plan-ready" and put the complete plan in its message. Then stop.`
-    : mode === 'plan-approval'
-      ? `PLAN APPROVAL IS REQUIRED. Inspect the project and develop a concrete implementation plan, but do not modify files. When ready, call dashboard_project_status with status "awaiting-approval" and put the complete plan in its message. Then stop.`
-      : `Implement this card autonomously. Work carefully and run appropriate checks. If you need a decision or permission, call dashboard_project_status with status "awaiting-approval" and a specific question, then stop. If blocked, report "blocked". Only report "completed" after checks pass; include the result and changed-file summary.`
-  return `Project Board card ${card.id}.\n\nTitle: ${card.title}\nDescription:\n${details}\nTags: ${tags}\n\n${instruction}\n\nUse dashboard_project_status for structured project state. This run is bounded to ${boardTurnLimit} model turns.`
-}
-
-function createBoardRunner(): PiRpcProcess {
-  const args = ['--mode', 'rpc', '--extension', runtimeInfoExtension, ...(rpcSessionDir ? ['--session-dir', rpcSessionDir] : [])]
-  const runner = new PiRpcProcess({ cwd: workspace, args })
-  runner.on('event', (event: RpcEvent) => {
-    if (activeBoardRun && event.type === 'tool_execution_start' && event.toolName === 'dashboard_project_status' && typeof event.toolCallId === 'string' && event.args && typeof event.args === 'object') {
-      boardToolInputs.set(event.toolCallId, event.args as Record<string, unknown>)
-    }
-    boardEventChain = boardEventChain.then(async () => {
-      await handleBoardEvent(event)
-      if (event.type === 'tool_execution_end' && typeof event.toolCallId === 'string') boardToolInputs.delete(event.toolCallId)
-    }).catch((error: Error) => {
-      record({ category: 'error', type: 'board_project_event_error', severity: 'error', summary: error.message, sessionId: activeBoardRun?.sessionId })
-      broadcast({ type: 'error', message: `Project Board automation failed: ${error.message}` })
-    })
-  })
-  runner.on('exit', (error: Error) => {
-    const run = activeBoardRun
-    if (!run || run.rpc !== runner) return
-    boardEventChain = boardEventChain.then(async () => {
-      await updateBoardRun(run.cardId, 'failed', error.message, run.sessionId, run.turns)
-      await finishBoardRun(run)
-    }).catch(() => undefined)
-  })
-  runner.on('protocolError', (error: Error) => broadcast({ type: 'error', message: `Project Board Pi protocol error: ${error.message}` }))
-  return runner
-}
-
-async function startBoardProject(cardId: string, expectedVersion: string, mode: BoardRunMode): Promise<void> {
-  if (activeBoardRun) throw new BoardError('Pi is already working on another Project Board card', 409)
-  await board.prepareRun(cardId, expectedVersion, mode)
-  const card = board.getCard(cardId)
-  if (!card) throw new BoardError('Card not found', 404)
-  const runner = createBoardRunner()
-  try {
-    await runner.start()
-    await runner.request({ type: 'set_session_name', name: card.title.slice(0, 100) })
-    const response = await runner.request({ type: 'get_state' })
-    const current = (response.data ?? {}) as Record<string, unknown>
-    const sessionId = typeof current.sessionId === 'string' ? current.sessionId : undefined
-    if (!sessionId) throw new Error('Pi did not provide a session ID')
-    const message = mode === 'execute' ? 'Pi is working on this card.' : mode === 'user-plan' ? 'Pi is drafting step-by-step instructions for the user.' : 'Pi is preparing a plan for approval.'
-    await updateBoardRun(cardId, mode === 'execute' ? 'working' : 'planning', message, sessionId, 0)
-    beginBoardRun(runner, cardId, sessionId)
-    broadcast({ type: 'sessions_changed' })
-    await runner.request({ type: 'prompt', message: projectPrompt(board.getCard(cardId)!, mode) })
-  } catch (error) {
-    await runner.stop().catch(() => undefined)
-    const failedRun = activeBoardRun as ActiveBoardRun | undefined
-    if (failedRun?.rpc === runner) await finishBoardRun(failedRun)
-    const message = error instanceof Error ? error.message : 'Unable to start Pi'
-    const linked = board.getCard(cardId)?.piSessionId
-    if (linked) await updateBoardRun(cardId, 'failed', message, linked).catch(() => undefined)
-    else { await board.setPiState(cardId, { status: 'failed', message }).catch(() => undefined); broadcast({ type: 'board_changed' }) }
-    throw error
-  }
-}
-
-async function resumeBoardProject(cardId: string, expectedVersion: string, approval: boolean): Promise<void> {
-  if (activeBoardRun) throw new BoardError('Pi is already working on another Project Board card', 409)
-  const card = board.getCard(cardId)
-  if (!card) throw new BoardError('Card not found', 404)
-  if (card.updatedAt !== expectedVersion) throw new BoardError('This card changed in another browser. Refresh and try again.', 409)
-  if (!card.piSessionId) throw new BoardError('This card does not have a linked Pi session', 409)
-  if (approval && card.piStatus !== 'awaiting-approval') throw new BoardError('This card is not awaiting approval', 409)
-  if (!approval && !['paused', 'blocked', 'failed'].includes(card.piStatus)) throw new BoardError('This card is not ready to resume', 409)
-  const path = await sessions.pathFor(card.piSessionId)
-  if (!path) throw new BoardError('The linked Pi session could not be found', 404)
-  const runner = createBoardRunner()
-  try {
-    await runner.start()
-    const switched = await runner.request({ type: 'switch_session', sessionPath: path })
-    if (switched.data && typeof switched.data === 'object' && (switched.data as Record<string, unknown>).cancelled) throw new BoardError('A Pi extension cancelled opening the linked session', 409)
-    const response = await runner.request({ type: 'get_state' })
-    const current = (response.data ?? {}) as Record<string, unknown>
-    if (current.sessionId !== card.piSessionId) throw new BoardError('Pi did not open the linked session', 409)
-    const message = approval
-      ? 'The user approved your latest plan or request. Continue the task accordingly. Use dashboard_project_status for further approval requests, blockers, or verified completion.'
-      : 'Resume this Project Board task. Review prior progress and use dashboard_project_status for approval requests, blockers, or verified completion.'
-    await updateBoardRun(cardId, 'working', approval ? 'Approved. Pi resumed work on this card.' : 'Pi resumed work on this card.', card.piSessionId, 0)
-    beginBoardRun(runner, cardId, card.piSessionId)
-    await runner.request({ type: 'prompt', message })
-  } catch (error) {
-    await runner.stop().catch(() => undefined)
-    const failedRun = activeBoardRun as ActiveBoardRun | undefined
-    if (failedRun?.rpc === runner) await finishBoardRun(failedRun)
-    throw error
-  }
-}
-
-async function takeoverBoardProject(cardId: string, expectedVersion: string): Promise<void> {
-  if (activeBoardRun) throw new BoardError('Pi is already working on another Project Board card', 409)
-  const before = board.getCard(cardId)
-  if (!before) throw new BoardError('Card not found', 404)
-  if (!before.piSessionId) throw new BoardError('This card does not have a linked Pi session', 409)
-  const path = await sessions.pathFor(before.piSessionId)
-  if (!path) throw new BoardError('The linked Pi session could not be found', 404)
-  await board.prepareTakeover(cardId, expectedVersion)
-  const card = board.getCard(cardId)!
-  const runner = createBoardRunner()
-  try {
-    await runner.start()
-    const switched = await runner.request({ type: 'switch_session', sessionPath: path })
-    if (switched.data && typeof switched.data === 'object' && (switched.data as Record<string, unknown>).cancelled) throw new BoardError('A Pi extension cancelled opening the linked session', 409)
-    const response = await runner.request({ type: 'get_state' })
-    const current = (response.data ?? {}) as Record<string, unknown>
-    if (current.sessionId !== card.piSessionId) throw new BoardError('Pi did not open the linked session', 409)
-    await updateBoardRun(cardId, 'working', 'Pi took ownership of the existing plan and is implementing it.', card.piSessionId!, 0)
-    beginBoardRun(runner, cardId, card.piSessionId!)
-    await runner.request({ type: 'prompt', message: 'The user has reassigned the remaining Project Board plan to Pi. Continue in this same session, treat the user’s latest Chat instructions as authoritative, implement the remaining work autonomously, and use dashboard_project_status for approval requests, blockers, or whole-card completion. Do not mark the card completed after only one partial step.' })
-  } catch (error) {
-    await runner.stop().catch(() => undefined)
-    const failedRun = activeBoardRun as ActiveBoardRun | undefined
-    if (failedRun?.rpc === runner) await finishBoardRun(failedRun)
-    const message = error instanceof Error ? error.message : 'Unable to hand the plan to Pi'
-    await board.setPiState(cardId, { status: 'failed', message }, card.piSessionId ?? undefined).catch(() => undefined)
-    broadcast({ type: 'board_changed' })
-    throw error
-  }
-}
-
-async function handleBoardEvent(event: RpcEvent): Promise<void> {
-  const run = activeBoardRun
-  if (!run) return
-  if (event.type === 'turn_start') {
-    run.turns += 1
-    if (run.turns > boardTurnLimit) {
-      await run.rpc.request({ type: 'abort' }).catch(() => undefined)
-      await updateBoardRun(run.cardId, 'paused', `Pi reached the ${boardTurnLimit}-turn project limit. Review progress and resume when ready.`, run.sessionId, run.turns - 1)
-      await finishBoardRun(run)
-    }
-    return
-  }
-  if (event.type === 'tool_execution_end' && event.toolName === 'dashboard_project_status' && !event.isError) {
-    const toolCallId = typeof event.toolCallId === 'string' ? event.toolCallId : ''
-    const result = event.result && typeof event.result === 'object' ? event.result as Record<string, unknown> : undefined
-    const details = result?.details && typeof result.details === 'object' ? result.details as Record<string, unknown> : undefined
-    const args = (event.args as Record<string, unknown> | undefined) ?? boardToolInputs.get(toolCallId) ?? details
-    if (!args || args.cardId !== run.cardId || typeof args.message !== 'string') return
-    const allowed = ['working', 'plan-ready', 'awaiting-approval', 'blocked', 'completed'] as const
-    if (!allowed.includes(args.status as (typeof allowed)[number])) return
-    await updateBoardRun(run.cardId, args.status as (typeof allowed)[number], args.message, run.sessionId, run.turns)
-    if (args.status !== 'working') await finishBoardRun(run)
-    return
-  }
-  if (event.type === 'message_update') {
-    const delta = event.assistantMessageEvent as Record<string, unknown> | undefined
-    if (delta?.type === 'error' && delta.reason !== 'aborted') {
-      await updateBoardRun(run.cardId, 'failed', `Pi’s response failed: ${String(delta.reason ?? 'unknown error')}. Review the linked session and retry when ready.`, run.sessionId, run.turns)
-      await finishBoardRun(run)
-      return
-    }
-  }
-  if (event.type === 'extension_error') {
-    await updateBoardRun(run.cardId, 'failed', `A Pi extension failed: ${String(event.error ?? 'unknown error')}`, run.sessionId, run.turns)
-    await finishBoardRun(run)
-    return
-  }
-  if (event.type === 'agent_settled' && activeBoardRun === run) {
-    await updateBoardRun(run.cardId, 'paused', 'Pi stopped without reporting completion. Review the linked session, then resume or provide guidance.', run.sessionId, run.turns)
-    await finishBoardRun(run)
-  }
-}
-
-async function handleLinkedChatBoardEvent(event: RpcEvent): Promise<void> {
-  if (!currentSessionId || activeBoardRun) return
-  const card = board.get().cards.find((candidate) => candidate.piSessionId === currentSessionId && !candidate.archivedAt)
-  if (!card) return
-  if (event.type === 'tool_execution_end' && event.toolName === 'dashboard_project_status' && !event.isError) {
-    const toolCallId = typeof event.toolCallId === 'string' ? event.toolCallId : ''
-    const result = event.result && typeof event.result === 'object' ? event.result as Record<string, unknown> : undefined
-    const details = result?.details && typeof result.details === 'object' ? result.details as Record<string, unknown> : undefined
-    const args = (event.args as Record<string, unknown> | undefined) ?? boardToolInputs.get(toolCallId) ?? details
-    if (!args || args.cardId !== card.id || typeof args.message !== 'string') return
-    const allowed = ['working', 'plan-ready', 'awaiting-approval', 'blocked', 'completed'] as const
-    if (!allowed.includes(args.status as (typeof allowed)[number])) return
-    await updateBoardRun(card.id, args.status as (typeof allowed)[number], args.message, currentSessionId)
-  } else if (event.type === 'agent_settled') {
-    const latest = board.getCard(card.id)
-    if (latest?.piStatus === 'working') {
-      await updateBoardRun(card.id, 'paused', 'Interactive Pi work paused at the end of this Chat turn. Continue chatting or update the card status.', currentSessionId)
-    }
-  }
-}
-
 rpc.on('event', (event: RpcEvent) => {
   broadcast({ type: 'event', event })
-  if (!activeBoardRun && event.type === 'tool_execution_start' && event.toolName === 'dashboard_project_status' && typeof event.toolCallId === 'string' && event.args && typeof event.args === 'object') {
-    boardToolInputs.set(event.toolCallId, event.args as Record<string, unknown>)
-  }
-  boardEventChain = boardEventChain.then(async () => {
-    await handleLinkedChatBoardEvent(event)
-    if (event.type === 'tool_execution_end' && typeof event.toolCallId === 'string') boardToolInputs.delete(event.toolCallId)
-  }).catch((error: Error) => broadcast({ type: 'error', message: `Linked Project Board update failed: ${error.message}` }))
 
   if (event.type === 'agent_start') {
     currentRunId = randomUUID()
@@ -825,8 +548,6 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
     return
   }
 
-  if (url.pathname.startsWith('/api/cron')) requireFeature('cron')
-  if (url.pathname.startsWith('/api/board')) requireFeature('board')
   if (url.pathname.startsWith('/api/skills') || url.pathname === '/api/tools') requireFeature('skills')
   if (url.pathname.startsWith('/api/plugins')) requireFeature('plugins')
   if (url.pathname.startsWith('/api/workers')) requireFeature('workers')
@@ -1085,107 +806,6 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
     return
   }
 
-  if (request.method === 'POST' && url.pathname === '/api/cron/jobs') {
-    const snapshot = await cron.create(await readJsonBody(request))
-    record({ category: 'cron', type: 'cron_job_created', severity: 'info', summary: 'Created a scheduled job', sessionId: currentSessionId })
-    json(response, 201, snapshot)
-    return
-  }
-  const cronActionMatch = url.pathname.match(/^\/api\/cron\/jobs\/([^/]+)\/(run|stop)$/)
-  if (request.method === 'POST' && cronActionMatch) {
-    const id = decodeURIComponent(cronActionMatch[1])
-    const action = cronActionMatch[2]
-    const snapshot = action === 'run' ? await cron.runNow(id) : await cron.stopRun(id)
-    record({ category: 'cron', type: action === 'run' ? 'cron_run_started' : 'cron_run_stopped', severity: 'info', summary: action === 'run' ? 'Started a scheduled job manually' : 'Stopped a scheduled job run', sessionId: currentSessionId, data: { jobId: id } })
-    json(response, 202, snapshot)
-    return
-  }
-  const cronJobMatch = url.pathname.match(/^\/api\/cron\/jobs\/([^/]+)$/)
-  if (request.method === 'PATCH' && cronJobMatch) {
-    const id = decodeURIComponent(cronJobMatch[1])
-    const version = expectedUpdatedAt(request, (message, status) => new CronError(message, status))
-    const snapshot = await cron.update(id, await readJsonBody(request), version)
-    record({ category: 'cron', type: 'cron_job_updated', severity: 'info', summary: 'Updated a scheduled job', sessionId: currentSessionId, data: { jobId: id } })
-    json(response, 200, snapshot)
-    return
-  }
-  if (request.method === 'DELETE' && cronJobMatch) {
-    const id = decodeURIComponent(cronJobMatch[1])
-    const version = expectedUpdatedAt(request, (message, status) => new CronError(message, status))
-    const snapshot = await cron.remove(id, version)
-    record({ category: 'cron', type: 'cron_job_deleted', severity: 'info', summary: 'Deleted a scheduled job', sessionId: currentSessionId, data: { jobId: id } })
-    json(response, 200, snapshot)
-    return
-  }
-
-  if (request.method === 'POST' && url.pathname === '/api/board/cards') {
-    const body = await readJsonBody(request)
-    const snapshot = await board.create(body)
-    record({ category: 'board', type: 'board_card_created', severity: 'info', summary: 'Created a project board card', sessionId: currentSessionId })
-    broadcast({ type: 'board_changed' })
-    json(response, 201, snapshot)
-    return
-  }
-  const boardActionMatch = url.pathname.match(/^\/api\/board\/cards\/([^/]+)\/(start|approve|resume|takeover|stop|archive|restore|status)$/)
-  if (request.method === 'POST' && boardActionMatch) {
-    const id = decodeURIComponent(boardActionMatch[1])
-    const action = boardActionMatch[2]
-    const version = expectedUpdatedAt(request, (message, status) => new BoardError(message, status))
-    const body = await readJsonBody(request)
-    await queueManagement(async () => {
-      if (action === 'start') {
-        const mode = typeof body.mode === 'string' && BOARD_RUN_MODES.includes(body.mode as BoardRunMode) ? body.mode as BoardRunMode : undefined
-        if (!mode) throw new BoardError('Choose a valid Project Board run mode')
-        await startBoardProject(id, version, mode)
-      } else if (action === 'approve' || action === 'resume') {
-        await resumeBoardProject(id, version, action === 'approve')
-      } else if (action === 'takeover') {
-        await takeoverBoardProject(id, version)
-      } else if (action === 'stop') {
-        const card = board.getCard(id)
-        if (!card) throw new BoardError('Card not found', 404)
-        if (card.updatedAt !== version) throw new BoardError('This card changed in another browser. Refresh and try again.', 409)
-        const run = activeBoardRun
-        if (!run || run.cardId !== id || !['working', 'planning'].includes(card.piStatus)) throw new BoardError('Pi is not actively working on this card', 409)
-        await run.rpc.request({ type: 'abort' }).catch(() => undefined)
-        await finishBoardRun(run)
-        await board.setPiState(id, { status: 'paused', message: 'Stopped by the user.' }, card.piSessionId ?? undefined)
-        broadcast({ type: 'board_changed' })
-      } else if (action === 'archive' || action === 'restore') {
-        await board.archive(id, action === 'archive', version)
-        broadcast({ type: 'board_changed' })
-      } else {
-        const manualAction = typeof body.action === 'string' && MANUAL_CARD_ACTIONS.includes(body.action as ManualCardAction) ? body.action as ManualCardAction : undefined
-        if (!manualAction) throw new BoardError('Choose a valid manual card status')
-        await board.setManualStatus(id, manualAction, version)
-        broadcast({ type: 'board_changed' })
-      }
-      record({ category: 'board', type: `board_project_${action}`, severity: action === 'stop' ? 'warning' : 'info', summary: `${action} Project Board card`, sessionId: board.getCard(id)?.piSessionId ?? currentSessionId, data: { cardId: id } })
-      json(response, ['start', 'approve', 'resume', 'takeover'].includes(action) ? 202 : 200, board.get())
-    })
-    return
-  }
-  const boardCardMatch = url.pathname.match(/^\/api\/board\/cards\/([^/]+)$/)
-  if (request.method === 'PATCH' && boardCardMatch) {
-    const body = await readJsonBody(request)
-    const id = decodeURIComponent(boardCardMatch[1])
-    const version = expectedUpdatedAt(request, (message, status) => new BoardError(message, status))
-    const snapshot = await board.update(id, body, version)
-    record({ category: 'board', type: 'board_card_updated', severity: 'info', summary: 'Updated a project board card', sessionId: currentSessionId, data: { cardId: id } })
-    broadcast({ type: 'board_changed' })
-    json(response, 200, snapshot)
-    return
-  }
-  if (request.method === 'DELETE' && boardCardMatch) {
-    const id = decodeURIComponent(boardCardMatch[1])
-    const version = expectedUpdatedAt(request, (message, status) => new BoardError(message, status))
-    const snapshot = await board.remove(id, version)
-    record({ category: 'board', type: 'board_card_deleted', severity: 'info', summary: 'Deleted a project board card', sessionId: currentSessionId, data: { cardId: id } })
-    broadcast({ type: 'board_changed' })
-    json(response, 200, snapshot)
-    return
-  }
-
   const toggleMatch = url.pathname.match(/^\/api\/skills\/([^/]+)\/toggle$/)
   if (request.method === 'POST' && toggleMatch) {
     const body = await readJsonBody(request)
@@ -1242,7 +862,7 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
     return
   }
   if (url.pathname === '/api/config') {
-    json(response, 200, { profile: profile.name, features: profile.features, ...(enabledFeatures.has('preview') ? { previewPort: previewPublicPort } : {}), ...(enabledFeatures.has('plugins') ? { pluginSources: pluginLocalRepositoryRoot ? ['github', 'workspace', 'local-preview'] : ['github', 'workspace'] } : {}) })
+    json(response, 200, { profile: profile.name, features: profile.features, ...(enabledFeatures.has('plugins') ? { pluginSources: pluginLocalRepositoryRoot ? ['github', 'workspace', 'local-preview'] : ['github', 'workspace'] } : {}) })
     return
   }
   if (url.pathname === '/api/workers') {
@@ -1265,14 +885,6 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
   }
   if (url.pathname === '/api/system') {
     json(response, 200, await systemSnapshot())
-    return
-  }
-  if (url.pathname === '/api/cron') {
-    json(response, 200, cron.get())
-    return
-  }
-  if (url.pathname === '/api/board') {
-    json(response, 200, board.get())
     return
   }
   if (url.pathname === '/api/files') {
@@ -1356,57 +968,10 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
   json(response, 404, { error: 'Not found' })
 }
 
-function denyPreview(response: ServerResponse, status: number, message: string): void {
-  response.writeHead(status, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' }).end(message)
-}
-function proxyPreviewHttp(request: IncomingMessage, response: ServerResponse): void {
-  if (!enabledFeatures.has('preview')) { denyPreview(response, 404, 'Project Preview is not enabled.'); return }
-  if (!auth.authenticate(request)) { denyPreview(response, 401, 'Dashboard sign-in is required.'); return }
-  const upstream = httpRequest({ socketPath: terminalSocketPath, method: request.method, path: `/preview${request.url ?? '/'}`, headers: safePreviewHeaders(request.headers) }, (result) => {
-    const headers = safePreviewHeaders(result.headers)
-    delete headers.host
-    delete headers['set-cookie']
-    response.writeHead(result.statusCode ?? 502, headers)
-    result.pipe(response)
-  })
-  request.pipe(upstream)
-  upstream.on('error', () => {
-    if (!response.headersSent) denyPreview(response, 502, 'Project Preview is unavailable. Start the Terminal service and try again.')
-    else response.destroy()
-  })
-}
-
-const previewServer = createServer(proxyPreviewHttp)
-const previewWebSocketServer = new WebSocketServer({ noServer: true, maxPayload: 2 * 1024 * 1024 })
-previewServer.on('upgrade', (request, socket, head) => {
-  const origin = request.headers.origin
-  if (!enabledFeatures.has('preview') || typeof origin !== 'string' || !previewAllowedOrigins.has(origin) || !auth.authenticate(request)) {
-    socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n')
-    socket.destroy()
-    return
-  }
-  previewWebSocketServer.handleUpgrade(request, socket, head, (client) => previewWebSocketServer.emit('connection', client, request))
-})
-previewWebSocketServer.on('connection', (browser, request: IncomingMessage) => {
-  const upstream = new WebSocket(`ws://localhost/preview${request.url ?? '/'}`, {
-    createConnection: () => connect(terminalSocketPath), headers: safePreviewHeaders(request.headers), handshakeTimeout: 10_000, maxPayload: 2 * 1024 * 1024,
-  })
-  const close = () => {
-    if (browser.readyState === WebSocket.OPEN) browser.close()
-    if (upstream.readyState === WebSocket.OPEN || upstream.readyState === WebSocket.CONNECTING) upstream.close()
-  }
-  upstream.on('message', (data, isBinary) => { if (browser.readyState === WebSocket.OPEN) browser.send(data, { binary: isBinary }) })
-  upstream.on('open', () => browser.on('message', (data, isBinary) => { if (upstream.readyState === WebSocket.OPEN) upstream.send(data, { binary: isBinary }) }))
-  upstream.on('error', close)
-  upstream.on('close', close)
-  browser.on('error', close)
-  browser.on('close', close)
-})
-
 const server = createServer((request, response) => {
   void handleHttp(request, response).catch((error) => {
     const message = error instanceof Error ? error.message : 'Request failed'
-    const status = error instanceof FileAccessError || error instanceof SkillError || error instanceof BoardError || error instanceof CronError || error instanceof SystemError || error instanceof PluginError || error instanceof PluginRuntimeError || error instanceof OnboardingError || error instanceof WorkerError ? error.status : 500
+    const status = error instanceof FileAccessError || error instanceof SkillError || error instanceof SystemError || error instanceof PluginError || error instanceof PluginRuntimeError || error instanceof OnboardingError || error instanceof WorkerError ? error.status : 500
     if (status >= 500) record({ category: 'error', type: 'http_error', severity: 'error', summary: message, sessionId: currentSessionId })
     if (!response.headersSent) json(response, status, { error: message })
     else response.end()
@@ -1558,11 +1123,7 @@ async function shutdown(signal: string): Promise<void> {
   record({ category: 'system', type: 'server_stop', severity: 'info', summary: `Dashboard backend stopped (${signal})`, sessionId: currentSessionId })
   for (const client of clients) client.close(1001, 'Server shutting down')
   webSocketServer.close()
-  previewWebSocketServer.close()
-  providerLoginWebSocketServer.close()
-  server.close()
-  previewServer.close()
-  await Promise.all([rpc.stop(), providerLogin.stop(), ...(activeBoardRun ? [finishBoardRun(activeBoardRun)] : []), ...(enabledFeatures.has('workers') ? [workers.shutdown()] : []), ...(enabledFeatures.has('cron') ? [cron.shutdown()] : [])])
+  await Promise.all([rpc.stop(), providerLogin.stop(), ...(enabledFeatures.has('workers') ? [workers.shutdown()] : [])])
   await activity.flush()
   process.exit(0)
 }
@@ -1573,11 +1134,7 @@ process.on('SIGTERM', () => void shutdown('SIGTERM'))
 server.requestTimeout = 120_000
 server.headersTimeout = 10_000
 server.keepAliveTimeout = 5_000
-previewServer.requestTimeout = 120_000
-previewServer.headersTimeout = 10_000
-previewServer.keepAliveTimeout = 5_000
 
-previewServer.listen(previewPort, host, () => console.log(`Pi Dashboard preview listener on http://${host}:${previewPort}`))
 server.listen(port, host, () => {
   console.log(`Pi Dashboard backend listening on http://${host}:${port}`)
   record({ category: 'system', type: 'server_start', severity: 'info', summary: 'Dashboard backend started' })
