@@ -103,14 +103,13 @@ export function TerminalBrowser() {
 
   return <Panel eyebrow="Project workspace" title="Terminal" action={<Chip tone={status === 'ready' ? 'accent' : status === 'error' ? 'warning' : undefined}>{status}</Chip>} fullWidth className="terminal-panel">
     <div className="terminal-tabs" role="tablist" aria-label="Terminal environments">
-      <button className="terminal-tab is-active" type="button" role="tab" aria-selected="true">Project Linux</button>
-      <button className="terminal-tab terminal-tab--locked" type="button" role="tab" aria-selected="false" disabled title="Advanced optional package; not installed">Windows PowerShell <span>locked</span></button>
+      <button className="terminal-tab is-active" type="button" role="tab" aria-selected="true">PowerShell / Native Shell</button>
       <div className="terminal-actions">
         <button className="button button--quiet" type="button" onClick={restart}>Restart</button>
         <button className="button button--quiet" type="button" disabled={!active} onClick={() => { setActive(false); setStatus('closed') }}>Close</button>
       </div>
     </div>
-    <div className="terminal-safety"><strong>Isolated project shell</strong><span>Can modify the mounted project. Pi credentials, dashboard state, Docker, host files, and network access are not available.</span></div>
+    <div className="terminal-safety"><strong>Native project shell</strong><span>Runs directly inside your project workspace. Full terminal support powered by native pseudo-terminal.</span></div>
     {message && <div className="connection-banner">{message}</div>}
     {active ? <TerminalSession key={generation} onStatus={updateStatus} /> : <div className="terminal-closed"><p>Terminal closed. Project files were preserved.</p><button className="button button--primary" type="button" onClick={restart}>Open new terminal</button></div>}
   </Panel>

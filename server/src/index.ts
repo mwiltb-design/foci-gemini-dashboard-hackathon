@@ -18,6 +18,7 @@ import { PiRpcProcess } from './pi-rpc.js'
 import { pluginAssetContentSecurityPolicy } from './plugin-asset-policy.js'
 import { PluginRuntimeError, proxyPluginRuntime } from './plugin-runtime-proxy.js'
 import { PluginError, PluginService } from './plugin-service.js'
+import { NativeTerminalSession } from './terminal-session.js'
 import { ProviderLoginSession } from './provider-login-session.js'
 import { safePreviewHeaders } from './preview-policy.js'
 import { dashboardProfile, type DashboardFeature } from './profile.js'
@@ -1429,34 +1430,9 @@ providerLoginWebSocketServer.on('connection', (browser) => {
 })
 
 terminalWebSocketServer.on('connection', (browser) => {
-  const upstream = new WebSocket('ws://localhost/terminal', { createConnection: () => connect(terminalSocketPath), handshakeTimeout: 10_000, maxPayload: 64 * 1024 })
-  const pending: Array<{ data: Buffer; binary: boolean }> = []
-  let opened = false
-  let finished = false
-  const close = (type: 'closed' | 'error', summary: string) => {
-    if (finished) return
-    finished = true
-    record({ category: type === 'error' ? 'error' : 'system', type: `terminal_${type}`, severity: type === 'error' ? 'error' : 'info', summary })
-    if (browser.readyState === WebSocket.OPEN) browser.close(type === 'error' ? 1011 : 1000, summary.slice(0, 120))
-    if (upstream.readyState === WebSocket.OPEN || upstream.readyState === WebSocket.CONNECTING) upstream.close()
-  }
-  upstream.on('open', () => {
-    opened = true
-    record({ category: 'system', type: 'terminal_opened', severity: 'info', summary: 'Opened an isolated project terminal' })
-    for (const message of pending.splice(0)) upstream.send(message.data, { binary: message.binary })
-  })
-  upstream.on('message', (data, isBinary) => {
-    if (browser.readyState === WebSocket.OPEN) browser.send(data, { binary: isBinary })
-  })
-  upstream.on('error', (error) => close('error', `Project terminal unavailable: ${error.message}`))
-  upstream.on('close', () => close('closed', opened ? 'Closed an isolated project terminal' : 'Project terminal connection closed'))
-  browser.on('message', (data, isBinary) => {
-    const buffer = Buffer.isBuffer(data) ? data : data instanceof ArrayBuffer ? Buffer.from(data) : Buffer.concat(data)
-    if (upstream.readyState === WebSocket.OPEN) upstream.send(buffer, { binary: isBinary })
-    else if (upstream.readyState === WebSocket.CONNECTING && pending.length < 10) pending.push({ data: buffer, binary: isBinary })
-  })
-  browser.on('error', () => close('error', 'Project terminal browser connection failed'))
-  browser.on('close', () => close('closed', 'Closed an isolated project terminal'))
+  record({ category: 'system', type: 'terminal_opened', severity: 'info', summary: 'Opened native workspace terminal' })
+  const session = new NativeTerminalSession(workspace)
+  session.attach(browser)
 })
 
 webSocketServer.on('connection', (socket) => {
