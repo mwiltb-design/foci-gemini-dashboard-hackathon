@@ -1,0 +1,103 @@
+import { FormEvent, useState } from 'react'
+import { Chip, Panel } from './Panel'
+import { useWorkers, type WorkerMode, type WorkerStatus } from '../hooks/useWorkers'
+
+const modes: Array<{ id: WorkerMode; label: string; detail: string }> = [
+  { id: 'research', label: 'Research', detail: 'Read-only investigation and concise findings.' },
+  { id: 'review', label: 'Review', detail: 'Read-only critique, risk checks, and recommendations.' },
+  { id: 'implement', label: 'Implement', detail: 'May edit project files and run focused validation.' },
+]
+
+function statusTone(status: WorkerStatus | 'ready' | 'disabled' | 'unavailable' | 'planned') {
+  if (status === 'completed' || status === 'ready') return 'accent' as const
+  if (status === 'running' || status === 'queued') return 'neutral' as const
+  return 'warning' as const
+}
+
+function time(value?: string): string {
+  return value ? new Date(value).toLocaleString() : '—'
+}
+
+export function WorkersBrowser({ onOpenSession }: { onOpenSession: (sessionId: string) => void }) {
+  const workers = useWorkers()
+  const [mode, setMode] = useState<WorkerMode>('research')
+  const [prompt, setPrompt] = useState('')
+  const subPi = workers.snapshot?.providers.find((provider) => provider.id === 'sub-pi')
+  const active = Boolean(workers.snapshot?.activeTaskId)
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    if (await workers.start(mode, prompt)) setPrompt('')
+  }
+
+  return (
+    <Panel eyebrow="Bounded delegation" title="Workers" action={<Chip tone={active ? 'warning' : 'accent'}>{active ? '1 active' : 'ready'}</Chip>} fullWidth>
+      <div className="workers-layout">
+        <section className="workers-providers" aria-label="Worker providers">
+          <header><div><span className="eyebrow">Provider readiness</span><h2>Available workers</h2></div></header>
+          <div className="worker-provider-grid">
+            {workers.snapshot?.providers.map((provider) => <article className={`worker-provider worker-provider--${provider.status}`} key={provider.id}>
+              <div><span className="worker-provider__mark">{provider.id === 'sub-pi' ? 'π' : '◇'}</span><Chip tone={statusTone(provider.status)}>{provider.status}</Chip></div>
+              <strong>{provider.name}</strong>
+              <p>{provider.description}</p>
+              <small>{provider.statusLabel}</small>
+            </article>)}
+          </div>
+        </section>
+
+        <section className="workers-main">
+          <form className="worker-compose" onSubmit={submit}>
+            <header><div><span className="eyebrow">New task</span><h2>Delegate to Sub PI</h2><p>Sub PI uses a separate saved Pi session. Primary PI receives only the bounded result and remains responsible for review.</p></div></header>
+            <div className="worker-mode-grid">
+              {modes.map((item) => <button className={mode === item.id ? 'is-selected' : ''} type="button" key={item.id} onClick={() => setMode(item.id)} disabled={active || workers.busy || subPi?.status !== 'ready'}>
+                <strong>{item.label}</strong><span>{item.detail}</span>
+              </button>)}
+            </div>
+            <label className="worker-prompt"><span>Bounded prompt</span><textarea rows={5} maxLength={12000} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Describe one narrow task and the concise result Primary PI should receive…" disabled={active || workers.busy || subPi?.status !== 'ready'} /></label>
+            <div className="worker-compose__footer">
+              <small>Default bounds: 8 turns · 10 minutes · 12 KB result · one job at a time</small>
+              <button className="button button--primary" type="submit" disabled={!prompt.trim() || active || workers.busy || subPi?.status !== 'ready'}>{workers.busy ? 'Starting…' : 'Start Sub PI'}</button>
+            </div>
+          </form>
+
+          {workers.error && <div className="form-error">{workers.error}</div>}
+
+          <div className="worker-workspace">
+            <aside className="worker-history">
+              <header><span className="eyebrow">Shared queue & history</span><button type="button" onClick={workers.refresh}>↻</button></header>
+              {workers.loading ? <div className="worker-empty">Loading tasks…</div> : workers.snapshot?.tasks.length
+                ? workers.snapshot.tasks.map((task) => <button className={workers.selectedId === task.id ? 'is-selected' : ''} type="button" key={task.id} onClick={() => workers.setSelectedId(task.id)}>
+                    <div><strong>{task.providerName}</strong><Chip tone={statusTone(task.status)}>{task.status}</Chip></div>
+                    <p>{task.prompt}</p><small>{task.mode} · {time(task.createdAt)}</small>
+                  </button>)
+                : <div className="worker-empty">No worker tasks yet.</div>}
+            </aside>
+
+            <section className="worker-detail">
+              {!workers.selected ? <div className="worker-empty">Select a task to inspect its bounded result and saved session.</div> : <>
+                <header>
+                  <div><span className="eyebrow">Task detail</span><h2>{workers.selected.providerName} · {workers.selected.mode}</h2><p>{workers.selected.prompt}</p></div>
+                  <Chip tone={statusTone(workers.selected.status)}>{workers.selected.status}</Chip>
+                </header>
+                <div className="worker-progress">
+                  <div><span>Progress</span><strong>{workers.selected.progress}</strong></div>
+                  <div><span>Turns</span><strong>{workers.selected.turns} / {workers.selected.bounds.turnLimit}</strong></div>
+                  <div><span>Started</span><strong>{time(workers.selected.startedAt)}</strong></div>
+                </div>
+                {(workers.selected.status === 'running' || workers.selected.status === 'queued') && <div className="worker-running-actions"><button className="button button--stop" type="button" disabled={workers.busy} onClick={() => void workers.cancel(workers.selected!.id)}>Cancel task</button></div>}
+                {workers.selected.error && <div className="worker-error">{workers.selected.error}</div>}
+                <section className="worker-result"><span className="eyebrow">Bounded result</span><pre>{workers.selected.result ?? 'Result will appear when Sub PI finishes.'}</pre>{workers.selected.resultTruncated && <small>The Dashboard truncated this result. Inspect the saved session for the full transcript.</small>}</section>
+                <section className="worker-files"><span className="eyebrow">Changed files detected</span>{workers.selected.changedFiles.length
+                  ? <ul>{workers.selected.changedFiles.map((file) => <li key={file.path}><code>{file.path}</code><span>{file.state}</span></li>)}</ul>
+                  : <p>No changed files were detected for this task.</p>}</section>
+                <footer>{workers.selected.sessionId
+                  ? <button className="button button--quiet" type="button" onClick={() => onOpenSession(workers.selected!.sessionId!)}>Open saved Sub PI session</button>
+                  : <span>Saved session will be available after the worker starts.</span>}</footer>
+              </>}
+            </section>
+          </div>
+        </section>
+      </div>
+    </Panel>
+  )
+}

@@ -1,0 +1,28 @@
+{
+  "name": "pi-dashboard-server",
+  "version": "1.0.0-alpha.1",
+  "description": "Backend API and RPC coordinator for Pi Dashboard",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc --noEmit",
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "^0.84.2",
+    "@earendil-works/pi-coding-agent": "^0.84.2",
+    "@homebridge/node-pty-prebuilt-multiarch": "^0.14.1",
+    "@sinclair/typebox": "^0.34.14",
+    "croner": "^9.0.0",
+    "minimatch": "^10.0.1",
+    "ws": "^8.18.0",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

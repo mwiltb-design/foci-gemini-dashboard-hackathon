@@ -1,0 +1,29 @@
+{
+  "name": "pi-dashboard-desktop",
+  "version": "1.0.0-alpha.1",
+  "description": "Standalone cross-platform desktop dashboard for Pi coding agent",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "server",
+    "ui",
+    "electron"
+  ],
+  "scripts": {
+    "start": "npm --prefix electron start",
+    "dev:server": "npm --prefix server run dev",
+    "dev:ui": "npm --prefix ui run dev",
+    "build": "npm --prefix server run build && npm --prefix ui run build",
+    "dist:windows": "npm run build && npm --prefix electron run dist:win"
+  },
+  "keywords": [
+    "pi",
+    "ai",
+    "dashboard",
+    "desktop",
+    "electron",
+    "developer-tools"
+  ],
+  "author": "mwiltb-design",
+  "license": "MIT"
+}

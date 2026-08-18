@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+dist/
+build/
+release/
+*.out
+
+# Environment & Secrets
+.env
+.env.local
+*.log
+npm-debug.log*
+
+# OS Files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Runtime State & User Data
+.pi/
+workspace/
+user-data/
+scratch/
