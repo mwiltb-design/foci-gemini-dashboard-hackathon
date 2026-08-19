@@ -42,14 +42,13 @@ export class ShortcutService {
         return
       }
 
-      const launchVbs = resolve(repoRoot, 'scripts/launch.vbs')
-
       const script = [
         `$WshShell = New-Object -ComObject WScript.Shell`,
         `$Shortcut = $WshShell.CreateShortcut('${shortcutPath.replace(/'/g, "''")}')`,
-        `$Shortcut.TargetPath = 'wscript.exe'`,
-        `$Shortcut.Arguments = '"${launchVbs.replace(/"/g, '`"')}"'`,
+        `$Shortcut.TargetPath = 'powershell.exe'`,
+        `$Shortcut.Arguments = '-WindowStyle Hidden -ExecutionPolicy Bypass -File "${devScript.replace(/"/g, '`"')}"'`,
         `$Shortcut.WorkingDirectory = '${repoRoot.replace(/'/g, "''")}'`,
+        `$Shortcut.WindowStyle = 7`,
         `$Shortcut.Description = 'Pi Dashboard - AI Desktop Workbench'`,
         `$Shortcut.Save()`,
       ].join('\r\n')
