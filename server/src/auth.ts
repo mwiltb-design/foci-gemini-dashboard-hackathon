@@ -67,7 +67,15 @@ export class DashboardAuth {
 
   originAllowed(request: { headers: IncomingHttpHeaders }, allowedOrigins: Set<string>, required = false): boolean {
     const origin = request.headers.origin
-    return typeof origin === 'string' && allowedOrigins.has(origin) && (!required || this.authenticate(request))
+    if (typeof origin !== 'string') return false
+    let isAllowed = allowedOrigins.has(origin)
+    if (!isAllowed) {
+      try {
+        const url = new URL(origin)
+        if (['localhost', '127.0.0.1', '::1'].includes(url.hostname)) isAllowed = true
+      } catch {}
+    }
+    return isAllowed && (!required || this.authenticate(request))
   }
 
   private isSecure(request: { headers: IncomingHttpHeaders }): boolean {

@@ -6,6 +6,7 @@ import { PluginBrowser } from './components/PluginBrowser'
 import { PluginManager } from './components/PluginManager'
 import { Onboarding, type OnboardingState } from './components/Onboarding'
 import { TerminalCommandGuide } from './components/TerminalCommandGuide'
+import { ProjectsModal } from './components/ProjectsModal'
 import { Topbar } from './components/Topbar'
 import { navigation, viewMeta } from './data/mockData'
 import { apiFetch, AUTH_REQUIRED_EVENT } from './api'
@@ -46,6 +47,7 @@ type DashboardFeature = ViewId | 'files-editor' | 'plugins'
 interface DashboardConfig {
   profile: 'core' | 'workbench'
   features: DashboardFeature[]
+  project?: { name: string; path: string }
   pluginSources?: Array<'github' | 'workspace' | 'local-preview'>
 }
 
@@ -60,6 +62,7 @@ function DashboardApp({ config }: { config: DashboardConfig }) {
   const [managedPluginId, setManagedPluginId] = useState<string>()
   const [pluginsPage, setPluginsPage] = useState(() => pluginsPageFromHash())
   const [menuOpen, setMenuOpen] = useState(false)
+  const [projectsOpen, setProjectsOpen] = useState(false)
   const [terminalMounted, setTerminalMounted] = useState(view === 'terminal')
   const chat = usePiChat()
   const pluginRegistry = usePlugins(config.features.includes('plugins'))
@@ -140,7 +143,15 @@ function DashboardApp({ config }: { config: DashboardConfig }) {
         onClose={() => setMenuOpen(false)}
       />
       <main className={`main-content${!pluginsPage && !activePlugin && view === 'chat' ? ' main-content--chat' : ''}`}>
-        <Topbar meta={topbarMeta} model={modelId} thinkingLevel={chat.state.thinkingLevel} onOpenMenu={() => setMenuOpen(true)} />
+        <Topbar
+          meta={topbarMeta}
+          model={modelId}
+          thinkingLevel={chat.state.thinkingLevel}
+          projectSlug={config.project?.name}
+          onOpenMenu={() => setMenuOpen(true)}
+          onOpenProjects={() => setProjectsOpen(true)}
+        />
+        <ProjectsModal isOpen={projectsOpen} onClose={() => setProjectsOpen(false)} />
         <div className={`workspace workspace--${pluginsPage ? 'plugin-manager' : activePlugin ? 'plugin' : view}`}>
           {(terminalMounted || view === 'terminal') && <div className={`persistent-terminal${view === 'terminal' && !activePlugin && !pluginsPage ? '' : ' persistent-terminal--hidden'}`} aria-hidden={view !== 'terminal' || Boolean(activePlugin) || pluginsPage}>
             <Suspense fallback={<div className="panel panel--full"><div className="panel__body">Loading terminal…</div></div>}><TerminalView /></Suspense>

@@ -225,8 +225,22 @@ function SystemContent({ snapshot, busy, onActive, onDefaults, onCuratedMemorySa
   const context = stats?.contextUsage
   const defaultWarnings = config.projectOverridesDefaults ? 'This project has a local model or thinking override. Global defaults do not replace project-level overrides.' : ''
 
+  const [shortcutNotice, setShortcutNotice] = useState('')
+
   function restart() {
     if (window.confirm('Restart the local Pi RPC process? The current saved session will be preserved, but the dashboard will briefly disconnect.')) void onRestart()
+  }
+
+  async function handleCreateShortcut() {
+    try {
+      const res = await fetch('/api/system/create-shortcut', { method: 'POST' })
+      const data = await res.json()
+      setShortcutNotice(data.message || (data.success ? 'Shortcut created on Desktop!' : 'Failed to create shortcut'))
+      setTimeout(() => setShortcutNotice(''), 5000)
+    } catch {
+      setShortcutNotice('Failed to create shortcut')
+      setTimeout(() => setShortcutNotice(''), 5000)
+    }
   }
 
   return (
@@ -238,6 +252,7 @@ function SystemContent({ snapshot, busy, onActive, onDefaults, onCuratedMemorySa
         <Fact label="Connected browsers" value={String(snapshot.backend.connectedClients)} />
       </div>
 
+      {shortcutNotice && <div className="connection-banner">{shortcutNotice}</div>}
       {snapshot.pi.error && <div className="board-error">Pi RPC: {snapshot.pi.error}</div>}
       {stats?.error && <div className="board-error">Session statistics: {stats.error}</div>}
       <div className="system-grid system-grid--models">
@@ -272,7 +287,13 @@ function SystemContent({ snapshot, busy, onActive, onDefaults, onCuratedMemorySa
 
       <div className="system-grid">
         <section className="system-section">
-          <header><div><span className="eyebrow">Runtime</span><h2>Dashboard services</h2></div><button className="button button--quiet" type="button" disabled={busy || Boolean(snapshot.pi.state.isStreaming)} onClick={restart}>Restart Pi RPC</button></header>
+          <header>
+            <div><span className="eyebrow">Runtime</span><h2>Dashboard services</h2></div>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button className="button button--quiet" type="button" onClick={handleCreateShortcut}>📌 Desktop Shortcut</button>
+              <button className="button button--quiet" type="button" disabled={busy || Boolean(snapshot.pi.state.isStreaming)} onClick={restart}>Restart Pi RPC</button>
+            </div>
+          </header>
           <div className="system-list">
             <div><span>Dashboard</span><code>v{snapshot.backend.dashboardVersion}</code></div>
             <div><span>Pi</span><code>{snapshot.backend.piVersion}</code></div>

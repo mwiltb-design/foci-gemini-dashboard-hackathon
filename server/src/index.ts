@@ -1,10 +1,11 @@
+import { spawn } from 'node:child_process'
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { stat } from 'node:fs/promises'
 import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http'
 import { connect } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
-import { resolve } from 'node:path'
+import { basename, resolve } from 'node:path'
 import { WebSocket, WebSocketServer } from 'ws'
 import { ActivityStore, type ActivityCategory, type ActivitySeverity } from './activity-store.js'
 import { DashboardAuth } from './auth.js'
@@ -27,6 +28,8 @@ import { SystemError, SystemService, THINKING_LEVELS } from './system-service.js
 import { ToolService } from './tool-service.js'
 import { SubPiWorkerAdapter } from './sub-pi-worker.js'
 import { WorkerCoordinator, WorkerError } from './worker-coordinator.js'
+import { ProjectService } from './project-service.js'
+import { ShortcutService } from './shortcut-service.js'
 import type { BrowserCommand, RpcEvent, ServerMessage } from './types.js'
 
 const port = Number(process.env.PORT ?? 4317)
@@ -36,8 +39,17 @@ const defaultDashboardDataDir = resolve(homedir(), '.pi-dashboard')
 try { mkdirSync(defaultDashboardDataDir, { recursive: true }) } catch {}
 
 const defaultWorkspace = resolve(homedir(), 'Documents/PiWorkspace')
-const workspace = process.env.PI_DASHBOARD_WORKSPACE ?? defaultWorkspace
-const workspaceKey = createHash('sha256').update(workspace).digest('hex').slice(0, 16)
+let workspace = resolve(process.env.PI_DASHBOARD_WORKSPACE ?? defaultWorkspace)
+let workspaceKey = createHash('sha256').update(workspace.toLowerCase()).digest('hex').slice(0, 12)
+let projectSlug = basename(workspace).toLowerCase().replace(/[^a-z0-9_-]/g, '-') || 'workspace'
+let projectDataDir = resolve(defaultDashboardDataDir, 'projects', `${projectSlug}-${workspaceKey}`)
+
+// Ensure project directories exist
+try {
+  mkdirSync(projectDataDir, { recursive: true })
+  mkdirSync(resolve(projectDataDir, 'sessions'), { recursive: true })
+  mkdirSync(resolve(projectDataDir, 'plugin-data'), { recursive: true })
+} catch {}
 
 // Auto-initialize clean workspace folder with starter MEMORY.md
 try {
@@ -51,12 +63,12 @@ try {
     writeFileSync(memoryFile, template, 'utf8')
   }
 } catch {}
-const sessionRoot = process.env.PI_SESSION_ROOT ?? resolve(defaultHomeAgentDir, 'sessions')
 const agentDir = process.env.PI_AGENT_DIR ?? defaultHomeAgentDir
-const rpcSessionDir = process.env.PI_RPC_SESSION_DIR
-const activityPath = process.env.PI_DASHBOARD_ACTIVITY_PATH ?? resolve(defaultDashboardDataDir, 'activity.jsonl')
-const sessionArchivePath = process.env.PI_DASHBOARD_SESSION_ARCHIVE_PATH ?? resolve(defaultDashboardDataDir, `sessions/${workspaceKey}.json`)
-const runtimeInfoPath = process.env.PI_DASHBOARD_RUNTIME_INFO_PATH ?? resolve(defaultDashboardDataDir, 'runtime-tools.json')
+let rpcSessionDir = process.env.PI_RPC_SESSION_DIR ?? resolve(projectDataDir, 'sessions')
+let sessionRoot = process.env.PI_SESSION_ROOT ?? rpcSessionDir
+let activityPath = process.env.PI_DASHBOARD_ACTIVITY_PATH ?? resolve(projectDataDir, 'activity.jsonl')
+let sessionArchivePath = process.env.PI_DASHBOARD_SESSION_ARCHIVE_PATH ?? resolve(projectDataDir, 'sessions-archive.json')
+let runtimeInfoPath = process.env.PI_DASHBOARD_RUNTIME_INFO_PATH ?? resolve(projectDataDir, 'runtime-tools.json')
 const runtimeInfoExtension = process.env.PI_DASHBOARD_RUNTIME_INFO_EXTENSION ?? resolve(process.cwd(), 'extensions/dashboard-runtime-info.ts')
 const curatedMemoryExtension = process.env.PI_DASHBOARD_CURATED_MEMORY_EXTENSION ?? resolve(process.cwd(), 'extensions/curated-memory.ts')
 const memoryCheckpointExtension = process.env.PI_DASHBOARD_MEMORY_CHECKPOINT_EXTENSION ?? resolve(process.cwd(), 'extensions/memory-checkpoint.ts')
@@ -66,13 +78,13 @@ const dashboardPluginAuthoringSkill = process.env.PI_DASHBOARD_PLUGIN_AUTHORING_
 const dashboardReferenceSkill = process.env.PI_DASHBOARD_REFERENCE_SKILL_PATH ?? resolve(process.cwd(), 'skills/dashboard-reference')
 const repoPluginDir = resolve(import.meta.dirname ?? process.cwd(), '../../plugins')
 const pluginCodeRoot = process.env.PI_DASHBOARD_PLUGIN_CODE_ROOT ?? (existsSync(repoPluginDir) ? repoPluginDir : resolve(process.cwd(), 'plugins'))
-const pluginStateRoot = process.env.PI_DASHBOARD_PLUGIN_STATE_ROOT ?? resolve(defaultDashboardDataDir, 'plugin-data')
-const pluginRuntimeSocketRoot = process.env.PI_DASHBOARD_PLUGIN_RUNTIME_SOCKET_ROOT ?? resolve(tmpdir(), 'pi-dashboard-plugins')
+let pluginStateRoot = process.env.PI_DASHBOARD_PLUGIN_STATE_ROOT ?? resolve(projectDataDir, 'plugin-data')
+let pluginRuntimeSocketRoot = process.env.PI_DASHBOARD_PLUGIN_RUNTIME_SOCKET_ROOT ?? resolve(tmpdir(), `pi-plugins-${workspaceKey}`)
 const defaultCustomPluginRoot = resolve(defaultDashboardDataDir, 'plugins')
 try { mkdirSync(defaultCustomPluginRoot, { recursive: true }) } catch {}
 const pluginLocalRepositoryRoot = process.env.PI_DASHBOARD_PLUGIN_LOCAL_REPOSITORY_ROOT ?? defaultCustomPluginRoot
-const terminalSocketPath = process.env.PI_DASHBOARD_TERMINAL_SOCKET ?? resolve(tmpdir(), 'pi-dashboard-terminal/terminal.sock')
-const workerStorePath = process.env.PI_DASHBOARD_WORKER_STORE_PATH ?? resolve(defaultDashboardDataDir, `workers/${workspaceKey}.json`)
+const terminalSocketPath = process.env.PI_DASHBOARD_TERMINAL_SOCKET ?? resolve(tmpdir(), `pi-terminal-${workspaceKey}/terminal.sock`)
+let workerStorePath = process.env.PI_DASHBOARD_WORKER_STORE_PATH ?? resolve(projectDataDir, 'worker-tasks.json')
 const allowedOrigins = new Set(
   (process.env.PI_DASHBOARD_ALLOWED_ORIGINS ?? 'http://localhost:5173,http://127.0.0.1:5173,http://localhost:5190,http://127.0.0.1:5190,http://localhost:5184,http://127.0.0.1:5184')
     .split(',')
@@ -88,26 +100,27 @@ const pluginAssetCapability = randomBytes(32).toString('base64url')
 const workerInternalToken = randomBytes(32).toString('base64url')
 const profile = dashboardProfile()
 const enabledFeatures = new Set<DashboardFeature>(profile.features)
-const rpcArgs = ['--mode', 'rpc', '--continue', '--name', 'Pi Dashboard', '--extension', runtimeInfoExtension, '--extension', curatedMemoryExtension, '--extension', memoryCheckpointExtension, '--extension', pluginToolsExtension, ...(enabledFeatures.has('workers') ? ['--extension', workersExtension] : []), ...(rpcSessionDir ? ['--session-dir', rpcSessionDir] : [])]
-const rpc = new PiRpcProcess({ cwd: workspace, args: rpcArgs, env: { PI_DASHBOARD_WORKER_INTERNAL_TOKEN: workerInternalToken } })
-const sessions = new SessionCatalog(sessionRoot, workspace)
-const sessionArchive = new SessionArchiveService(sessionArchivePath)
-const files = new FileService(workspace)
-const git = new GitService(workspace)
-const skills = new SkillService(workspace, agentDir)
+let rpcArgs = ['--mode', 'rpc', '--continue', '--name', 'Pi Dashboard', '--extension', runtimeInfoExtension, '--extension', curatedMemoryExtension, '--extension', memoryCheckpointExtension, '--extension', pluginToolsExtension, ...(enabledFeatures.has('workers') ? ['--extension', workersExtension] : []), ...(rpcSessionDir ? ['--session-dir', rpcSessionDir] : [])]
+let rpc = new PiRpcProcess({ cwd: workspace, args: rpcArgs, env: { PI_DASHBOARD_WORKER_INTERNAL_TOKEN: workerInternalToken } })
+let sessions = new SessionCatalog(sessionRoot, workspace)
+let sessionArchive = new SessionArchiveService(sessionArchivePath)
+let files = new FileService(workspace)
+let git = new GitService(workspace)
+let skills = new SkillService(workspace, agentDir)
 const system = new SystemService(workspace, agentDir)
 const onboarding = new OnboardingService(workspace, agentDir, defaultDashboardDataDir)
+const projectService = new ProjectService()
 const tools = new ToolService(runtimeInfoPath)
-const plugins = new PluginService({ bundledRoot: pluginCodeRoot, stateRoot: pluginStateRoot, workspaceRoot: workspace, runtimeSocketRoot: pluginRuntimeSocketRoot, assetCapability: pluginAssetCapability, localRepositoryRoot: pluginLocalRepositoryRoot })
-const activity = new ActivityStore(activityPath)
+let plugins = new PluginService({ bundledRoot: pluginCodeRoot, stateRoot: pluginStateRoot, workspaceRoot: workspace, runtimeSocketRoot: pluginRuntimeSocketRoot, assetCapability: pluginAssetCapability, localRepositoryRoot: pluginLocalRepositoryRoot })
+let activity = new ActivityStore(activityPath)
 const providerLogin = new ProviderLoginSession()
 const workerBounds = {
   turnLimit: positiveLimit(process.env.PI_DASHBOARD_WORKER_TURN_LIMIT, 8, 1),
   timeoutMs: positiveLimit(process.env.PI_DASHBOARD_WORKER_TIMEOUT_MS, 10 * 60_000, 60_000),
   resultLimitBytes: positiveLimit(process.env.PI_DASHBOARD_WORKER_RESULT_LIMIT_BYTES, 12 * 1024, 1024),
 }
-const subPi = new SubPiWorkerAdapter({ workspace, sessionDir: rpcSessionDir, pluginToolsExtension, git, enabled: enabledFeatures.has('workers') })
-const workers = new WorkerCoordinator({
+let subPi = new SubPiWorkerAdapter({ workspace, sessionDir: rpcSessionDir, pluginToolsExtension, git, enabled: enabledFeatures.has('workers') })
+let workers = new WorkerCoordinator({
   storePath: workerStorePath,
   adapter: subPi,
   bounds: workerBounds,
@@ -211,6 +224,88 @@ async function reloadRpcResources(): Promise<void> {
   await rpc.start()
   await sendSnapshot()
   broadcast({ type: 'skills_changed' })
+}
+
+async function switchActiveWorkspace(targetWorkspace: string): Promise<{ workspace: string; projectSlug: string }> {
+  targetWorkspace = resolve(targetWorkspace)
+  if (!existsSync(targetWorkspace)) {
+    throw new Error(`Workspace path does not exist: ${targetWorkspace}`)
+  }
+
+  // Auto-initialize MEMORY.md if missing
+  const memoryFile = resolve(targetWorkspace, 'MEMORY.md')
+  if (!existsSync(memoryFile)) {
+    const templatePath = resolve(import.meta.dirname ?? process.cwd(), '../templates/MEMORY.md')
+    const template = existsSync(templatePath)
+      ? readFileSync(templatePath, 'utf8')
+      : '# Project Memory\n\nThis file is the local memory bank for this project workspace.\n'
+    writeFileSync(memoryFile, template, 'utf8')
+  }
+
+  await ensureIdle()
+  await rpc.stop()
+
+  workspace = targetWorkspace
+  workspaceKey = createHash('sha256').update(workspace.toLowerCase()).digest('hex').slice(0, 12)
+  projectSlug = basename(workspace).toLowerCase().replace(/[^a-z0-9_-]/g, '-') || 'workspace'
+  projectDataDir = resolve(defaultDashboardDataDir, 'projects', `${projectSlug}-${workspaceKey}`)
+
+  try {
+    mkdirSync(projectDataDir, { recursive: true })
+    mkdirSync(resolve(projectDataDir, 'sessions'), { recursive: true })
+    mkdirSync(resolve(projectDataDir, 'plugin-data'), { recursive: true })
+  } catch {}
+
+  const currentRpcSessionDir = resolve(projectDataDir, 'sessions')
+  rpcSessionDir = currentRpcSessionDir
+  sessionRoot = currentRpcSessionDir
+  activityPath = resolve(projectDataDir, 'activity.jsonl')
+  sessionArchivePath = resolve(projectDataDir, 'sessions-archive.json')
+  pluginStateRoot = resolve(projectDataDir, 'plugin-data')
+  workerStorePath = resolve(projectDataDir, 'worker-tasks.json')
+  pluginRuntimeSocketRoot = resolve(tmpdir(), `pi-plugins-${workspaceKey}`)
+
+  sessions = new SessionCatalog(sessionRoot, workspace)
+  sessionArchive = new SessionArchiveService(sessionArchivePath)
+  files = new FileService(workspace)
+  git = new GitService(workspace)
+  skills = new SkillService(workspace, agentDir)
+  plugins = new PluginService({ bundledRoot: pluginCodeRoot, stateRoot: pluginStateRoot, workspaceRoot: workspace, runtimeSocketRoot: pluginRuntimeSocketRoot, assetCapability: pluginAssetCapability, localRepositoryRoot: pluginLocalRepositoryRoot })
+  activity = new ActivityStore(activityPath)
+  subPi = new SubPiWorkerAdapter({ workspace, sessionDir: currentRpcSessionDir, pluginToolsExtension, git, enabled: enabledFeatures.has('workers') })
+  workers = new WorkerCoordinator({
+    storePath: workerStorePath,
+    adapter: subPi,
+    bounds: workerBounds,
+    primaryDefaults: async () => {
+      const snapshot = await state()
+      const model = snapshot.model && typeof snapshot.model === 'object' ? snapshot.model as Record<string, unknown> : undefined
+      return {
+        ...(model && typeof model.provider === 'string' && typeof model.id === 'string' ? { model: { provider: model.provider, id: model.id } } : {}),
+        ...(typeof snapshot.thinkingLevel === 'string' ? { thinkingLevel: snapshot.thinkingLevel } : {}),
+      }
+    },
+  })
+
+  rpcArgs = ['--mode', 'rpc', '--continue', '--name', 'Pi Dashboard', '--extension', runtimeInfoExtension, '--extension', curatedMemoryExtension, '--extension', memoryCheckpointExtension, '--extension', pluginToolsExtension, ...(enabledFeatures.has('workers') ? ['--extension', workersExtension] : []), '--session-dir', currentRpcSessionDir]
+  rpc = new PiRpcProcess({ cwd: workspace, args: rpcArgs, env: { PI_DASHBOARD_WORKER_INTERNAL_TOKEN: workerInternalToken } })
+
+  await Promise.all([
+    activity.initialize(),
+    sessionArchive.initialize(),
+    system.initialize(),
+    ...(enabledFeatures.has('plugins') ? [plugins.initialize()] : []),
+    ...(enabledFeatures.has('workers') ? [workers.initialize()] : []),
+  ])
+
+  await rpc.start()
+  await sendSnapshot()
+  broadcast({ type: 'workspace_changed' })
+  broadcast({ type: 'sessions_changed' })
+  broadcast({ type: 'skills_changed' })
+  record({ category: 'system', type: 'workspace_switched', severity: 'info', summary: `Switched active workspace to "${projectSlug}"` })
+
+  return { workspace, projectSlug }
 }
 
 function requireFeature(feature: DashboardFeature): void {
@@ -857,8 +952,77 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
     return
   }
 
+  if (request.method === 'POST' && url.pathname === '/api/projects/create') {
+    const body = await readJsonBody(request)
+    const name = typeof body.name === 'string' ? body.name : ''
+    const template = typeof body.template === 'string' ? body.template : 'standard'
+    try {
+      const created = projectService.create(name, template)
+      record({ category: 'system', type: 'project_created', severity: 'info', summary: `Created new project "${created.name}"`, data: { path: created.path } })
+      json(response, 201, created)
+    } catch (error) {
+      json(response, 400, { error: error instanceof Error ? error.message : 'Unable to create project' })
+    }
+    return
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/projects/switch') {
+    const body = await readJsonBody(request)
+    const targetPath = typeof body.projectPath === 'string' ? body.projectPath : ''
+    try {
+      const switched = await switchActiveWorkspace(targetPath)
+      json(response, 200, switched)
+    } catch (error) {
+      json(response, 400, { error: error instanceof Error ? error.message : 'Unable to switch workspace' })
+    }
+    return
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/projects/open-window') {
+    const body = await readJsonBody(request)
+    const targetPath = typeof body.projectPath === 'string' ? resolve(body.projectPath) : ''
+    if (!targetPath || !existsSync(targetPath)) {
+      json(response, 400, { error: 'Invalid project path' })
+      return
+    }
+    const isWindows = process.platform === 'win32'
+    const npxCmd = isWindows ? 'npx.cmd' : 'npx'
+    const repoRoot = resolve(import.meta.dirname ?? process.cwd(), '../../')
+
+    const child = spawn(npxCmd, ['electron', 'electron/main.cjs'], {
+      detached: true,
+      stdio: 'ignore',
+      cwd: repoRoot,
+      windowsHide: true,
+      env: {
+        ...process.env,
+        PI_DASHBOARD_WORKSPACE: targetPath,
+      },
+      shell: isWindows,
+    })
+    child.unref()
+    json(response, 200, { success: true, message: 'Launching new project window...' })
+    return
+  }
+
+  if (request.method === 'POST' && url.pathname === '/api/system/create-shortcut') {
+    const result = await ShortcutService.createDesktopShortcut()
+    record({ category: 'system', type: 'shortcut_created', severity: result.success ? 'info' : 'warning', summary: result.message })
+    json(response, result.success ? 200 : 500, result)
+    return
+  }
+
   if (request.method !== 'GET') {
     json(response, 405, { error: 'Method not allowed' })
+    return
+  }
+  if (url.pathname === '/api/projects') {
+    json(response, 200, {
+      rootDir: projectService.rootDir,
+      activeWorkspace: workspace,
+      activeProjectSlug: projectSlug,
+      projects: projectService.list(),
+    })
     return
   }
   if (url.pathname === '/api/onboarding') {
@@ -866,7 +1030,12 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
     return
   }
   if (url.pathname === '/api/config') {
-    json(response, 200, { profile: profile.name, features: profile.features, ...(enabledFeatures.has('plugins') ? { pluginSources: pluginLocalRepositoryRoot ? ['github', 'workspace', 'local-preview'] : ['github', 'workspace'] } : {}) })
+    json(response, 200, {
+      profile: profile.name,
+      features: profile.features,
+      project: { name: projectSlug, path: workspace },
+      ...(enabledFeatures.has('plugins') ? { pluginSources: pluginLocalRepositoryRoot ? ['github', 'workspace', 'local-preview'] : ['github', 'workspace'] } : {}),
+    })
     return
   }
   if (url.pathname === '/api/workers') {
@@ -990,7 +1159,7 @@ server.on('upgrade', (request, socket, head) => {
   const origin = request.headers.origin
   const path = new URL(request.url ?? '/', 'http://localhost').pathname
   const allowedPath = path === '/ws' || path === '/ws/provider-login' || (path === '/ws/terminal' && enabledFeatures.has('terminal'))
-  if (!allowedPath || typeof origin !== 'string' || !allowedOrigins.has(origin) || (auth.enabled && !auth.authenticate(request))) {
+  if (!allowedPath || !auth.originAllowed(request, allowedOrigins) || (auth.enabled && !auth.authenticate(request))) {
     socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n')
     socket.destroy()
     return
@@ -1141,11 +1310,36 @@ server.requestTimeout = 120_000
 server.headersTimeout = 10_000
 server.keepAliveTimeout = 5_000
 
-server.listen(port, host, () => {
-  console.log(`Pi Dashboard backend listening on http://${host}:${port}`)
-  record({ category: 'system', type: 'server_start', severity: 'info', summary: 'Dashboard backend started' })
-  void rpc.start().then(() => state()).catch((error: Error) => {
-    record({ category: 'error', type: 'rpc_start_failed', severity: 'error', summary: error.message })
-    console.error(`Unable to start Pi RPC: ${error.message}`)
-  })
-})
+function startServer(initialPort: number, host: string, maxAttempts = 20): void {
+  let currentPort = initialPort
+  let attempts = 0
+
+  const tryListen = () => {
+    const onError = (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE' && attempts < maxAttempts && !process.env.PORT && !process.env.PI_DASHBOARD_PORT) {
+        attempts++
+        currentPort++
+        console.log(`Port ${currentPort - 1} in use, hunting for next available port... trying ${currentPort}`)
+        setTimeout(tryListen, 50)
+      } else {
+        console.error(`Server failed to start on port ${currentPort}: ${error.message}`)
+        process.exit(1)
+      }
+    }
+
+    server.once('error', onError)
+    server.listen(currentPort, host, () => {
+      server.removeListener('error', onError)
+      console.log(`Pi Dashboard backend listening on http://${host}:${currentPort} [Project: ${projectSlug}]`)
+      record({ category: 'system', type: 'server_start', severity: 'info', summary: `Dashboard backend started on port ${currentPort} for project ${projectSlug}` })
+      void rpc.start().then(() => state()).catch((error: Error) => {
+        record({ category: 'error', type: 'rpc_start_failed', severity: 'error', summary: error.message })
+        console.error(`Unable to start Pi RPC: ${error.message}`)
+      })
+    })
+  }
+
+  tryListen()
+}
+
+startServer(port, host)

@@ -70,7 +70,8 @@ async function startServices() {
   backendProcess = spawn(npxCmd, ['tsx', 'src/index.ts'], {
     cwd: path.join(ROOT_DIR, 'server'),
     env,
-    stdio: 'inherit',
+    stdio: 'ignore',
+    windowsHide: true,
     shell: isWindows,
   })
 
@@ -78,7 +79,8 @@ async function startServices() {
   frontendProcess = spawn(npxCmd, ['vite', '--port', String(uiPort), '--host', '127.0.0.1'], {
     cwd: path.join(ROOT_DIR, 'ui'),
     env: { ...env, VITE_BACKEND_PORT: String(backendPort) },
-    stdio: 'inherit',
+    stdio: 'ignore',
+    windowsHide: true,
     shell: isWindows,
   })
 

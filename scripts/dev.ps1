@@ -1,3 +1,8 @@
+param(
+    [string]$Workspace,
+    [string]$Port
+)
+
 # -----------------------------------------------------------------------------
 # Pi-Dashboard Desktop - Developer Launch Script (PowerShell / Windows)
 # -----------------------------------------------------------------------------
@@ -16,10 +21,19 @@ if (-not (Test-Path "$RootDir\server\node_modules")) {
     npm --prefix "$RootDir" install
 }
 
-# Ensure clean port and auth variables
-$env:UI_PORT = "5173"
-$env:BACKEND_PORT = "4317"
-Remove-Item env:PORT -ErrorAction SilentlyContinue
+if ($Workspace) {
+    $Resolved = (Resolve-Path $Workspace).Path
+    Write-Host "[*] Active Workspace: $Resolved" -ForegroundColor Green
+    $env:PI_DASHBOARD_WORKSPACE = $Resolved
+}
+
+if ($Port) {
+    $env:PORT = $Port
+    $env:BACKEND_PORT = $Port
+} else {
+    Remove-Item env:PORT -ErrorAction SilentlyContinue
+}
+
 Remove-Item env:PI_DASHBOARD_AUTH_TOKEN -ErrorAction SilentlyContinue
 
 Set-Location "$RootDir"
