@@ -1,4 +1,4 @@
-# 🚀 Pi-Dashboard 2.0 (Desktop Edition)
+# 🚀 Pi-Dashboards 2.0 (Desktop Edition)
 
 A modern, native desktop dashboard and agent execution environment for the [Pi Coding Agent](https://github.com/earendil-works/pi). Built with Electron, React, Node.js, and TypeScript.
 
@@ -27,8 +27,8 @@ A modern, native desktop dashboard and agent execution environment for the [Pi C
 
 ```powershell
 # Clone the repository
-git clone https://github.com/mwiltb-design/pi-dashboard-2.0.git
-cd pi-dashboard-2.0
+git clone https://github.com/mwiltb-design/pi-dashboard-2.0.git Pi-Dashboards
+cd Pi-Dashboards
 
 # Launch developer desktop environment (auto-installs dependencies)
 .\scripts\dev.ps1
@@ -41,7 +41,7 @@ cd pi-dashboard-2.0
 ## 📁 Architecture Overview
 
 ```
-pi-dashboard-2.0/
+Pi-Dashboards/
 ├── electron/          # Native Electron shell & window manager
 ├── server/            # Backend API, RPC process runner & PTY bridge
 │   ├── docs/          # Built-in documentation (abilities, limits, shortcuts)
