@@ -38,10 +38,11 @@ const defaultHomeAgentDir = resolve(homedir(), '.pi/agent')
 const defaultDashboardDataDir = resolve(homedir(), '.pi-dashboard')
 try { mkdirSync(defaultDashboardDataDir, { recursive: true }) } catch {}
 
-const defaultWorkspace = resolve(homedir(), 'Documents/PiWorkspace')
+const defaultProjectsRoot = resolve(homedir(), 'Pi-Dashboards')
+const defaultWorkspace = resolve(defaultProjectsRoot, 'Default')
 let workspace = resolve(process.env.PI_DASHBOARD_WORKSPACE ?? defaultWorkspace)
 let workspaceKey = createHash('sha256').update(workspace.toLowerCase()).digest('hex').slice(0, 12)
-let projectSlug = basename(workspace).toLowerCase().replace(/[^a-z0-9_-]/g, '-') || 'workspace'
+let projectSlug = basename(workspace).toLowerCase().replace(/[^a-z0-9_-]/g, '-') || 'default'
 let projectDataDir = resolve(defaultDashboardDataDir, 'projects', `${projectSlug}-${workspaceKey}`)
 
 // Ensure project directories exist

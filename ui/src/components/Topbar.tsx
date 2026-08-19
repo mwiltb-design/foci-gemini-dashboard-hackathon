@@ -36,7 +36,7 @@ export function Topbar({ meta, model, thinkingLevel, projectSlug, onOpenMenu, on
           }}
         >
           <span style={{ color: 'var(--accent)' }}>📁</span>
-          <span>Project: <strong style={{ color: 'var(--accent)' }}>{projectSlug || 'PiWorkspace'}</strong></span>
+          <span>Project: <strong style={{ color: 'var(--accent)' }}>{projectSlug || 'Default'}</strong></span>
         </button>
         <Chip>{model ?? 'model loading'}</Chip>
         <Chip>{thinkingLevel ?? '—'}</Chip>

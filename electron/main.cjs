@@ -53,7 +53,8 @@ async function startServices() {
 
   console.log(`[Pi Dashboard] Launching on UI Port: ${uiPort} | Backend Port: ${backendPort}`)
 
-  const workspacePath = process.env.PI_WORKSPACE || process.env.PI_DASHBOARD_WORKSPACE || path.resolve(require('node:os').homedir(), 'Documents', 'PiWorkspace')
+  const defaultProjectsRoot = path.resolve(require('node:os').homedir(), 'Pi-Dashboards')
+  const workspacePath = process.env.PI_WORKSPACE || process.env.PI_DASHBOARD_WORKSPACE || path.resolve(defaultProjectsRoot, 'Default')
 
   const env = {
     ...process.env,
