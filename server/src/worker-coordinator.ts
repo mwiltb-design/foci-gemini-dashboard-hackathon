@@ -66,7 +66,7 @@ export class WorkerCoordinator extends EventEmitter {
     return task ? { ...task, changedFiles: [...task.changedFiles] } : undefined
   }
 
-  async start(input: { providerId?: string; mode?: string; prompt?: string }): Promise<WorkerTask> {
+  async start(input: { providerId?: string; mode?: string; prompt?: string; model?: { provider: string; id: string }; thinkingLevel?: string }): Promise<WorkerTask> {
     if (this.activeTaskId) throw new WorkerError('Sub PI is already working on another task', 409)
     if (input.providerId && input.providerId !== this.options.adapter.provider.id) throw new WorkerError('This worker provider is not operational', 409)
     if (!WORKER_MODES.includes(input.mode as WorkerMode)) throw new WorkerError('Choose Research, Review, or Implement mode')
@@ -89,6 +89,8 @@ export class WorkerCoordinator extends EventEmitter {
       createdAt: now,
       updatedAt: now,
       changedFiles: [],
+      ...(input.model ? { model: input.model } : {}),
+      ...(input.thinkingLevel ? { thinkingLevel: input.thinkingLevel } : {}),
     }
     this.tasks.unshift(task)
     this.tasks = this.tasks.slice(0, MAX_TASKS)
@@ -128,6 +130,8 @@ export class WorkerCoordinator extends EventEmitter {
         prompt: task.prompt,
         bounds: task.bounds,
         ...defaults,
+        ...(task.model ? { model: task.model } : {}),
+        ...(task.thinkingLevel ? { thinkingLevel: task.thinkingLevel } : {}),
       }, {
         onSession: (sessionId) => this.update(task, { sessionId }),
         onProgress: (progress, turns) => this.update(task, { progress, turns }),

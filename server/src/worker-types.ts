@@ -33,6 +33,8 @@ export interface WorkerTask {
   result?: string
   resultTruncated?: boolean
   error?: string
+  model?: { provider: string; id: string }
+  thinkingLevel?: string
   changedFiles: WorkerChangedFile[]
 }
 

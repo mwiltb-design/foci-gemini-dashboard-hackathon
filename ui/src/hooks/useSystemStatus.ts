@@ -153,7 +153,7 @@ async function request(url: string, options?: RequestInit): Promise<SystemSnapsh
   return body
 }
 
-export function useSystemStatus(revision: string) {
+export function useSystemStatus(revision: string = '') {
   const [snapshot, setSnapshot] = useState<SystemSnapshot | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)

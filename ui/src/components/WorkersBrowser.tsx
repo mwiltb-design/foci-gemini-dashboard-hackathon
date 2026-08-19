@@ -1,6 +1,7 @@
-import { FormEvent, useState } from 'react'
+import { FormEvent, useMemo, useState } from 'react'
 import { Chip, Panel } from './Panel'
 import { useWorkers, type WorkerMode, type WorkerStatus } from '../hooks/useWorkers'
+import { useSystemStatus, type AvailableModel } from '../hooks/useSystemStatus'
 
 const modes: Array<{ id: WorkerMode; label: string; detail: string }> = [
   { id: 'research', label: 'Research', detail: 'Read-only investigation and concise findings.' },
@@ -18,16 +19,49 @@ function time(value?: string): string {
   return value ? new Date(value).toLocaleString() : '—'
 }
 
+function modelKey(provider: string, id: string): string {
+  return `${provider}/${id}`
+}
+
+function splitModel(value: string): { provider?: string; model?: string } {
+  const [provider, ...rest] = value.split('/')
+  return { provider, model: rest.join('/') }
+}
+
 export function WorkersBrowser({ onOpenSession }: { onOpenSession: (sessionId: string) => void }) {
   const workers = useWorkers()
+  const system = useSystemStatus()
   const [mode, setMode] = useState<WorkerMode>('research')
+  const [selectedModelKey, setSelectedModelKey] = useState('default')
+  const [selectedThinking, setSelectedThinking] = useState('default')
   const [prompt, setPrompt] = useState('')
   const subPi = workers.snapshot?.providers.find((provider) => provider.id === 'sub-pi')
   const active = Boolean(workers.snapshot?.activeTaskId)
 
+  const availableModels = system.snapshot?.pi.availableModels ?? []
+  const availableThinking: string[] = system.snapshot?.pi.thinkingLevels ?? ['off', 'minimal', 'low', 'medium', 'high']
+
+  const groupedModels = useMemo(() => {
+    const map = new Map<string, AvailableModel[]>()
+    for (const model of availableModels) {
+      const list = map.get(model.provider) ?? []
+      list.push(model)
+      map.set(model.provider, list)
+    }
+    return map
+  }, [availableModels])
+
   async function submit(event: FormEvent) {
     event.preventDefault()
-    if (await workers.start(mode, prompt)) setPrompt('')
+    let modelPayload: { provider: string; id: string } | undefined
+    if (selectedModelKey !== 'default') {
+      const parsed = splitModel(selectedModelKey)
+      if (parsed.provider && parsed.model) {
+        modelPayload = { provider: parsed.provider, id: parsed.model }
+      }
+    }
+    const thinkingPayload = selectedThinking !== 'default' ? selectedThinking : undefined
+    if (await workers.start(mode, prompt, modelPayload, thinkingPayload)) setPrompt('')
   }
 
   return (
@@ -53,6 +87,45 @@ export function WorkersBrowser({ onOpenSession }: { onOpenSession: (sessionId: s
                 <strong>{item.label}</strong><span>{item.detail}</span>
               </button>)}
             </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px', marginTop: '10px', marginBottom: '8px' }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--muted)' }}>
+                <span>Assigned Model for Sub-PI:</span>
+                <select
+                  value={selectedModelKey}
+                  onChange={(e) => setSelectedModelKey(e.target.value)}
+                  disabled={active || workers.busy || subPi?.status !== 'ready'}
+                  style={{ padding: '8px 10px', background: 'var(--field)', color: 'var(--text)', border: '1px solid var(--line)', borderRadius: '7px', font: '11px sans-serif' }}
+                >
+                  <option value="default">⚡ Same as Primary Pi (Default)</option>
+                  {[...groupedModels.entries()].map(([provider, models]) => (
+                    <optgroup label={provider} key={provider}>
+                      {models.map((model) => (
+                        <option value={modelKey(model.provider, model.id)} key={modelKey(model.provider, model.id)}>
+                          {model.name} · {model.id}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </label>
+
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--muted)' }}>
+                <span>Thinking / Reasoning Level:</span>
+                <select
+                  value={selectedThinking}
+                  onChange={(e) => setSelectedThinking(e.target.value)}
+                  disabled={active || workers.busy || subPi?.status !== 'ready'}
+                  style={{ padding: '8px 10px', background: 'var(--field)', color: 'var(--text)', border: '1px solid var(--line)', borderRadius: '7px', font: '11px sans-serif' }}
+                >
+                  <option value="default">Default Thinking</option>
+                  {availableThinking.map((level) => (
+                    <option key={level} value={level}>{level}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
             <label className="worker-prompt"><span>Bounded prompt</span><textarea rows={5} maxLength={12000} value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Describe one narrow task and the concise result Primary PI should receive…" disabled={active || workers.busy || subPi?.status !== 'ready'} /></label>
             <div className="worker-compose__footer">
               <small>Default bounds: 8 turns · 10 minutes · 12 KB result · one job at a time</small>

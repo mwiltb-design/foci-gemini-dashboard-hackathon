@@ -80,13 +80,19 @@ export function useWorkers() {
     return () => window.clearInterval(timer)
   }, [snapshot?.activeTaskId, refresh])
 
-  async function start(mode: WorkerMode, prompt: string): Promise<boolean> {
+  async function start(mode: WorkerMode, prompt: string, model?: { provider: string; id: string }, thinkingLevel?: string): Promise<boolean> {
     setBusy(true)
     try {
       const task = await request('/api/workers/tasks', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ providerId: 'sub-pi', mode, prompt }),
+        body: JSON.stringify({
+          providerId: 'sub-pi',
+          mode,
+          prompt,
+          ...(model ? { model } : {}),
+          ...(thinkingLevel ? { thinkingLevel } : {}),
+        }),
       }) as WorkerTask
       setSelectedId(task.id)
       setError('')

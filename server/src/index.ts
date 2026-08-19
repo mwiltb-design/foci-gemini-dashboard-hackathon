@@ -840,6 +840,10 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
       providerId: typeof body.providerId === 'string' ? body.providerId : undefined,
       mode: typeof body.mode === 'string' ? body.mode : undefined,
       prompt: typeof body.prompt === 'string' ? body.prompt : undefined,
+      model: body.model && typeof body.model === 'object' && typeof (body.model as any).provider === 'string' && typeof (body.model as any).id === 'string'
+        ? { provider: String((body.model as any).provider), id: String((body.model as any).id) }
+        : undefined,
+      thinkingLevel: typeof body.thinkingLevel === 'string' ? body.thinkingLevel : undefined,
     })
     record({ category: 'system', type: 'worker_task_started', severity: 'info', summary: `Started ${task.mode} task with ${task.providerName}`, sessionId: currentSessionId, data: { taskId: task.id, providerId: task.providerId, mode: task.mode } })
     json(response, 202, task)
@@ -1000,10 +1004,12 @@ providerLoginWebSocketServer.on('connection', (browser) => {
   providerLogin.attach(browser)
 })
 
-terminalWebSocketServer.on('connection', (browser) => {
-  record({ category: 'system', type: 'terminal_opened', severity: 'info', summary: 'Opened native workspace terminal' })
+terminalWebSocketServer.on('connection', (browser, request: IncomingMessage) => {
+  const url = new URL(request.url ?? '/', 'http://localhost')
+  const shell = url.searchParams.get('shell') ?? undefined
+  record({ category: 'system', type: 'terminal_opened', severity: 'info', summary: `Opened native workspace terminal (${shell || 'default'})` })
   const session = new NativeTerminalSession(workspace)
-  session.attach(browser)
+  session.attach(browser, shell)
 })
 
 webSocketServer.on('connection', (socket) => {

@@ -10,9 +10,23 @@ export class NativeTerminalSession {
     return this.ptyProcess !== null
   }
 
-  attach(browser: WebSocket): void {
+  attach(browser: WebSocket, requestedShell?: string): void {
     const isWindows = process.platform === 'win32'
-    const shell = isWindows ? 'powershell.exe' : (process.env.SHELL || 'bash')
+    let shell = isWindows ? 'powershell.exe' : (process.env.SHELL || 'bash')
+    
+    if (requestedShell) {
+      const normalized = requestedShell.toLowerCase().trim()
+      if (isWindows) {
+        if (normalized === 'cmd') shell = 'cmd.exe'
+        else if (normalized === 'wsl' || normalized === 'linux') shell = 'wsl.exe'
+        else if (normalized === 'gitbash' || normalized === 'bash') shell = 'bash.exe'
+        else if (normalized === 'pwsh' || normalized === 'powershell') shell = 'powershell.exe'
+      } else {
+        if (normalized === 'zsh') shell = '/bin/zsh'
+        else if (normalized === 'bash') shell = '/bin/bash'
+        else if (normalized === 'sh') shell = '/bin/sh'
+      }
+    }
 
     const env: NodeJS.ProcessEnv = {
       ...process.env,
