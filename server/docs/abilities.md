@@ -30,3 +30,11 @@ Pi-Dashboard is an intelligent coding assistant interface and agent execution en
 
 ### 6. Sub-Agent Workers (Optional Module)
 * Background agent coordinator for offloading complex multi-step research, review, or implementation tasks.
+
+### 7. Sandboxed Project Manager
+* All user projects are safely sandboxed under `~/Pi-Dashboards/<ProjectName>` with starter `MEMORY.md` and `Notes.md`.
+* Multi-window project switching with dynamic port collision avoidance.
+
+### 8. Private Remote Access (Tailscale Serve)
+* In-app configuration for private, encrypted remote pairing over Tailscale (`https://<machine>.tailnet.ts.net:8443`).
+* Custom password authentication with complete subprocess token protection.

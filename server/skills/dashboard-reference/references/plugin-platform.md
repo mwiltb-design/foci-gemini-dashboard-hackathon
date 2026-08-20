@@ -109,8 +109,7 @@ For plugin platform changes, prefer focused tests first:
 
 ```powershell
 cd server
-.\node_modules\.bin\tsx.cmd --test test\plugin-host.test.ts test\shared-notes-migration.test.ts test\plugin-asset-policy.test.ts
-.\node_modules\.bin\tsx.cmd --test --test-name-pattern "hosted repository|installed hosted" test\plugin-service.test.ts test\dashboard-plugin-tools.test.ts
+npm test
 ```
 
-Then build the Docker image from the release worktree before tagging.
+Run `npm run build` from the workspace root to verify full TypeScript and Vite compilation.

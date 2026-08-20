@@ -184,5 +184,3 @@ For hosted agent-connected plugins:
 - Verify persistence across restart, disable without deletion, and explicit retained-data deletion.
 - In chat, verify tools are absent with grants off, read tools appear only with read access, and mutations fail until write access is granted.
 - Exercise every tool once through Pi and confirm the UI shows the same state.
-
-Do not run Docker unless the user has authorized it for the current task.

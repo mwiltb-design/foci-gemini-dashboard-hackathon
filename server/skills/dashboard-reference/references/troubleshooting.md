@@ -1,6 +1,6 @@
 # Dashboard Troubleshooting Reference
 
-Use this document when Dashboard behavior differs between Pi, the browser, Docker, or Tailscale.
+Use this document when Dashboard behavior differs between Pi, the browser, desktop processes, or Tailscale.
 
 ## Shared Notes Loads But Manual Add Fails
 

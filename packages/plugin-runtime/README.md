@@ -14,13 +14,12 @@ A plugin service supplies a stable ID, version, private Unix socket, namespaced 
 - bounded JSON parsing and errors; and
 - idempotent graceful `SIGTERM`/`SIGINT` shutdown.
 
-The deployment, not this library, must enforce the stronger boundary:
+The execution environment, not this library, enforces process boundaries:
 
-- one restricted service/container per stateful bundled plugin;
-- read-only root and immutable plugin code;
-- only that plugin's writable data directory and dedicated control volume mounted (the backend mounts it at `/run/pi-dashboard-plugins/<pluginId>`; it is never shared with another plugin);
-- no Pi agent state, provider credentials, Dashboard token, sessions, project, or Docker socket;
+- one restricted runtime process per stateful bundled plugin;
+- only that plugin's writable data directory and socket;
+- no Pi agent state, provider credentials, Dashboard token, sessions, or unrelated project files;
 - no network unless a separately approved destination policy requires it; and
-- explicit PID/CPU/memory/tmp limits with all capabilities dropped.
+- process resource limits where supported.
 
 Inactive plugins must not start their service or call `startPluginRuntime()`, so they create no socket or data directory.

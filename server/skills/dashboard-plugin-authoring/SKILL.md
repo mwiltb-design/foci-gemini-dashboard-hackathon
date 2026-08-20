@@ -35,7 +35,7 @@ Before editing, state the chosen path and the files you expect to touch.
 
 Keep Dashboard enablement separate from Pi read/write grants. Give each agent operation a narrow `/agent/*` tool and classify it honestly as `read` or `write`. Display-only plugins such as games must not request agent access.
 
-Do not add credentials, execute repository install/build scripts during review, weaken iframe isolation, mount broad Dashboard state, expose the Docker socket, add network access without a demonstrated requirement, or redesign the plugin platform.
+Do not add credentials, execute repository install/build scripts during review, weaken iframe isolation, mount broad Dashboard state, expose host operating system primitives, add network access without a demonstrated requirement, or redesign the plugin platform.
 
 Do not commit the main Dashboard repository or push anything unless the user explicitly asks. A new standalone static plugin may receive the local Git commit required for exact-commit review; report that commit clearly.
 
