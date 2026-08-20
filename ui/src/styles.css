@@ -1,6 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
 
-:root {
+:root, [data-theme="obsidian"] {
   color-scheme: dark;
   font-family: 'DM Sans', system-ui, sans-serif;
   color: #e9eef5;
@@ -20,6 +20,96 @@
   --yellow: #e8bd69;
   --red: #ef7d88;
   --shadow: 0 18px 50px #0007;
+}
+
+[data-theme="midnight"] {
+  color-scheme: dark;
+  --bg: #0b1120;
+  --sidebar: #0f172a;
+  --panel: #131f37;
+  --panel-2: #1a2c4e;
+  --field: #080d19;
+  --line: #22375d;
+  --line-strong: #385994;
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --accent: #38bdf8;
+  --blue: #60a5fa;
+  --yellow: #fbbf24;
+  --red: #f87171;
+  --shadow: 0 18px 50px #0009;
+}
+
+[data-theme="emerald"] {
+  color-scheme: dark;
+  --bg: #0c1613;
+  --sidebar: #101c18;
+  --panel: #162621;
+  --panel-2: #1d332c;
+  --field: #08100d;
+  --line: #26433a;
+  --line-strong: #3b6b5d;
+  --text: #edf7f4;
+  --muted: #8faea4;
+  --accent: #34d399;
+  --blue: #5eead4;
+  --yellow: #fcd34d;
+  --red: #fb7185;
+  --shadow: 0 18px 50px #0009;
+}
+
+[data-theme="catppuccin"] {
+  color-scheme: dark;
+  --bg: #181825;
+  --sidebar: #1e1e2e;
+  --panel: #252538;
+  --panel-2: #313244;
+  --field: #11111b;
+  --line: #45475a;
+  --line-strong: #585b70;
+  --text: #cdd6f4;
+  --muted: #a6adc8;
+  --accent: #cba6f7;
+  --blue: #89b4fa;
+  --yellow: #f9e2af;
+  --red: #f38ba8;
+  --shadow: 0 18px 50px #0009;
+}
+
+[data-theme="cyberpunk"] {
+  color-scheme: dark;
+  --bg: #050508;
+  --sidebar: #0a0a10;
+  --panel: #12101c;
+  --panel-2: #1b162c;
+  --field: #030305;
+  --line: #332752;
+  --line-strong: #5d4399;
+  --text: #f5f3ff;
+  --muted: #a59cc0;
+  --accent: #f43f5e;
+  --blue: #06b6d4;
+  --yellow: #facc15;
+  --red: #ff2a5f;
+  --shadow: 0 18px 50px #000c;
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f8fafc;
+  --sidebar: #f1f5f9;
+  --panel: #ffffff;
+  --panel-2: #e2e8f0;
+  --field: #ffffff;
+  --line: #cbd5e1;
+  --line-strong: #94a3b8;
+  --text: #0f172a;
+  --muted: #64748b;
+  --accent: #0d9488;
+  --blue: #2563eb;
+  --yellow: #d97706;
+  --red: #dc2626;
+  --shadow: 0 10px 30px #00000010;
 }
 
 * { box-sizing: border-box; }

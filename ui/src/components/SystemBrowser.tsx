@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { useSystemStatus, type AvailableModel, type SystemSnapshot } from '../hooks/useSystemStatus'
 import { Chip, Panel } from './Panel'
 import { RemoteAccessCard } from './RemoteAccessCard'
+import { ThemeSettingsCard } from './ThemeSettingsCard'
 
 function modelKey(provider?: string, id?: string): string {
   return provider && id ? `${provider}\u0000${id}` : ''
@@ -285,6 +286,8 @@ function SystemContent({ snapshot, busy, onActive, onDefaults, onCuratedMemorySa
       </div>
 
       <OptionalCapabilities snapshot={snapshot} />
+
+      <ThemeSettingsCard />
 
       <div className="system-grid">
         <section className="system-section">

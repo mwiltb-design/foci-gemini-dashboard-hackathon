@@ -8,9 +8,10 @@ interface TopbarProps {
   projectSlug?: string
   onOpenMenu: () => void
   onOpenProjects: () => void
+  onOpenThemes: () => void
 }
 
-export function Topbar({ meta, model, thinkingLevel, projectSlug, onOpenMenu, onOpenProjects }: TopbarProps) {
+export function Topbar({ meta, model, thinkingLevel, projectSlug, onOpenMenu, onOpenProjects, onOpenThemes }: TopbarProps) {
   return (
     <header className="topbar">
       <button className="menu-button" type="button" aria-label="Open navigation" onClick={onOpenMenu}>☰</button>
@@ -37,6 +38,23 @@ export function Topbar({ meta, model, thinkingLevel, projectSlug, onOpenMenu, on
         >
           <span style={{ color: 'var(--accent)' }}>📁</span>
           <span>Project: <strong style={{ color: 'var(--accent)' }}>{projectSlug || 'Default'}</strong></span>
+        </button>
+        <button
+          className="button button--quiet"
+          type="button"
+          onClick={onOpenThemes}
+          title="Change Color Theme"
+          style={{
+            fontSize: '12px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '4px 8px',
+            cursor: 'pointer',
+          }}
+        >
+          <span>🎨</span>
+          <span>Theme</span>
         </button>
         <Chip>{model ?? 'model loading'}</Chip>
         <Chip>{thinkingLevel ?? '—'}</Chip>

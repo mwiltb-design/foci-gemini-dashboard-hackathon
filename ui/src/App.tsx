@@ -7,6 +7,7 @@ import { PluginManager } from './components/PluginManager'
 import { Onboarding, type OnboardingState } from './components/Onboarding'
 import { TerminalCommandGuide } from './components/TerminalCommandGuide'
 import { ProjectsModal } from './components/ProjectsModal'
+import { ThemeSelectorModal } from './components/ThemeSelectorModal'
 import { Topbar } from './components/Topbar'
 import { navigation, viewMeta } from './data/mockData'
 import { apiFetch, AUTH_REQUIRED_EVENT } from './api'
@@ -63,6 +64,7 @@ function DashboardApp({ config }: { config: DashboardConfig }) {
   const [pluginsPage, setPluginsPage] = useState(() => pluginsPageFromHash())
   const [menuOpen, setMenuOpen] = useState(false)
   const [projectsOpen, setProjectsOpen] = useState(false)
+  const [themesOpen, setThemesOpen] = useState(false)
   const [terminalMounted, setTerminalMounted] = useState(view === 'terminal')
   const chat = usePiChat()
   const pluginRegistry = usePlugins(config.features.includes('plugins'))
@@ -150,8 +152,10 @@ function DashboardApp({ config }: { config: DashboardConfig }) {
           projectSlug={config.project?.name}
           onOpenMenu={() => setMenuOpen(true)}
           onOpenProjects={() => setProjectsOpen(true)}
+          onOpenThemes={() => setThemesOpen(true)}
         />
         <ProjectsModal isOpen={projectsOpen} onClose={() => setProjectsOpen(false)} />
+        <ThemeSelectorModal isOpen={themesOpen} onClose={() => setThemesOpen(false)} />
         <div className={`workspace workspace--${pluginsPage ? 'plugin-manager' : activePlugin ? 'plugin' : view}`}>
           {(terminalMounted || view === 'terminal') && <div className={`persistent-terminal${view === 'terminal' && !activePlugin && !pluginsPage ? '' : ' persistent-terminal--hidden'}`} aria-hidden={view !== 'terminal' || Boolean(activePlugin) || pluginsPage}>
             <Suspense fallback={<div className="panel panel--full"><div className="panel__body">Loading terminal…</div></div>}><TerminalView /></Suspense>
