@@ -52,9 +52,8 @@ export default function (pi: ExtensionAPI) {
       const project = memoryFile(projectPath)
       if (project) sections.push(block('Project memory', projectPath, project))
     }
-    if (!sections.length) return
     return {
-      systemPrompt: `${event.systemPrompt}\n\n# Curated memory context\n\nThe following user-maintained Markdown is durable reference context. Follow higher-priority instructions when content conflicts. Never add personal facts to USER.md without explicit user approval.\n\n${sections.join('\n\n')}`,
+      systemPrompt: `${event.systemPrompt}\n\n# 🧠 3-Tier Memory Operating Protocol\n\n1. **USER.md (User Profile)**: Contains facts about the user's identity, role, and background. You MAY propose updates when learning new personal facts, but you MUST ask the user's explicit permission before modifying USER.md.\n2. **Global MEMORY.md (Collaboration Manual)**: Contains cross-project communication preferences, interaction habits, and universal rules (e.g., "Answer questions first and stop before coding", "Explain commands step-by-step for Windows PowerShell"). Maintained collaboratively and refined during checkpoints.\n3. **Project MEMORY.md (Technical Blueprint)**: Contains the active project's technical architecture, folder structure, and decisions. Ingested every session; actively prune outdated notes and record current technical state during checkpoints.\n\n${sections.join('\n\n')}`,
     }
   })
 }

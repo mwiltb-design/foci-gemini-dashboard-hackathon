@@ -18,12 +18,12 @@ const statusPath = process.env.PI_DASHBOARD_MEMORY_CHECKPOINT_STATUS_PATH ?? res
 
 const REVIEW_PROMPT = `Memory checkpoint. This is a scheduled, lightweight review—not a new development task.
 
-1. Review the useful durable facts from the recent conversation and tool work.
-2. Read the global MEMORY.md and compare it with what you learned.
-3. If something is genuinely important and useful across future sessions, add or consolidate it in MEMORY.md. Keep the file concise; do not save temporary details, secrets, raw logs, or easily rediscovered facts.
-4. Do not edit USER.md. If you discover a potentially useful preference or user-profile change, mention it briefly for the user to approve later.
+1. Review the useful facts and technical work from the recent conversation.
+2. For Global MEMORY.md: If you learned a new cross-project collaboration or communication preference (e.g., how the user prefers answers, explanations, or code formatting), add or consolidate it in Global MEMORY.md. Keep it concise.
+3. For Project MEMORY.md: Heavily review and update the active project's technical architecture. Prune out obsolete/completed notes, and record the current technical state, folder layout, and key implementation decisions.
+4. For USER.md: DO NOT edit USER.md directly. If you discovered a personal fact (name, role, location, goals), mention it in your response and ask the user explicitly if they would like you to add it to USER.md.
 5. If there is nothing worth saving, do nothing.
-6. Report only a brief result, then wait for the user's next request.`
+6. Report only a brief summary of what was updated, then wait for the user's next request.`
 
 function jsonFile(path: string): unknown {
   try { return JSON.parse(readFileSync(path, 'utf8')) as unknown } catch { return undefined }

@@ -5,7 +5,7 @@ import { stat } from 'node:fs/promises'
 import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http'
 import { connect } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
-import { basename, resolve } from 'node:path'
+import { basename, dirname, resolve } from 'node:path'
 import { WebSocket, WebSocketServer } from 'ws'
 import { ActivityStore, type ActivityCategory, type ActivitySeverity } from './activity-store.js'
 import { DashboardAuth } from './auth.js'
@@ -1040,8 +1040,77 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
     return
   }
 
+  if (request.method === 'POST' && url.pathname === '/api/memory/tier') {
+    const body = await readJsonBody(request)
+    const type = typeof body.type === 'string' ? body.type : 'project'
+    const content = typeof body.content === 'string' ? body.content : ''
+
+    let targetPath = resolve(workspace, 'MEMORY.md')
+    let label = 'Project Memory'
+    if (type === 'user') {
+      targetPath = resolve(agentDir, 'USER.md')
+      label = 'User Profile'
+    } else if (type === 'global') {
+      targetPath = resolve(agentDir, 'MEMORY.md')
+      label = 'Global Memory'
+    }
+
+    try {
+      mkdirSync(dirname(targetPath), { recursive: true })
+      writeFileSync(targetPath, content, 'utf8')
+      record({ category: 'system', type: 'memory_saved', severity: 'info', summary: `Saved ${label} (${targetPath})` })
+      json(response, 200, { success: true, type, path: targetPath })
+    } catch (err: any) {
+      json(response, 500, { error: `Failed to save ${label}: ${err?.message || 'Unknown error'}` })
+    }
+    return
+  }
+
   if (request.method !== 'GET') {
     json(response, 405, { error: 'Method not allowed' })
+    return
+  }
+  if (url.pathname === '/api/memory/tier') {
+    const type = url.searchParams.get('type') || 'project'
+    let targetPath = resolve(workspace, 'MEMORY.md')
+    let title = 'Project Memory (MEMORY.md)'
+    let badge = '📁 Project Blueprint — Technical State'
+    let description = 'Living technical blueprint for this workspace. Actively updated and pruned by the AI at checkpoints.'
+    let rule = 'Pruned and updated during session checkpoints.'
+
+    if (type === 'user') {
+      targetPath = resolve(agentDir, 'USER.md')
+      title = 'User Profile (USER.md)'
+      badge = '👤 User Profile — Facts & Identity'
+      description = 'Facts about your identity, background, skills, and goals.'
+      rule = '🔒 Protected: AI MUST ask your permission before modifying.'
+    } else if (type === 'global') {
+      targetPath = resolve(agentDir, 'MEMORY.md')
+      title = 'Global Memory (MEMORY.md)'
+      badge = '🌐 Global Collaboration — Habits & Rules'
+      description = 'Cross-project communication preferences, interaction habits, and universal rules.'
+      rule = 'Collaborative: Refined during session checkpoints.'
+    }
+
+    let content = ''
+    let exists = false
+    try {
+      if (existsSync(targetPath)) {
+        content = readFileSync(targetPath, 'utf8')
+        exists = true
+      }
+    } catch {}
+
+    json(response, 200, {
+      type,
+      path: targetPath,
+      content,
+      exists,
+      title,
+      badge,
+      description,
+      rule,
+    })
     return
   }
   if (url.pathname === '/api/system/remote-access') {
