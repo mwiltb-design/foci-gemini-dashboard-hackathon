@@ -34,7 +34,5 @@ if ($Port) {
     Remove-Item env:PORT -ErrorAction SilentlyContinue
 }
 
-Remove-Item env:PI_DASHBOARD_AUTH_TOKEN -ErrorAction SilentlyContinue
-
 Set-Location "$RootDir"
 npm start

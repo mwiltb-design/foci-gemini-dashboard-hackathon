@@ -56,16 +56,18 @@ async function startServices() {
   const defaultProjectsRoot = path.resolve(require('node:os').homedir(), 'Pi-Dashboards')
   const workspacePath = process.env.PI_WORKSPACE || process.env.PI_DASHBOARD_WORKSPACE || path.resolve(defaultProjectsRoot, 'Default')
 
+  const configuredOrigins = (process.env.PI_DASHBOARD_ALLOWED_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean)
+  const localOrigins = [`http://localhost:${uiPort}`, `http://127.0.0.1:${uiPort}`]
+  const mergedOrigins = [...new Set([...localOrigins, ...configuredOrigins])].join(',')
+
   const env = {
     ...process.env,
     PORT: String(backendPort),
     HOST: '127.0.0.1',
     PI_DASHBOARD_WORKSPACE: workspacePath,
-    PI_DASHBOARD_ALLOWED_ORIGINS: `http://localhost:${uiPort},http://127.0.0.1:${uiPort}`,
+    PI_DASHBOARD_ALLOWED_ORIGINS: mergedOrigins,
     DASHBOARD_BACKEND_URL: `http://127.0.0.1:${backendPort}`,
   }
-  // Clear any inherited token from previous terminal sessions for a password-free start
-  delete env.PI_DASHBOARD_AUTH_TOKEN
 
   // Start Backend
   backendProcess = spawn(npxCmd, ['tsx', 'src/index.ts'], {

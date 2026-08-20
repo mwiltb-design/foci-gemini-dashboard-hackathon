@@ -30,6 +30,7 @@ import { SubPiWorkerAdapter } from './sub-pi-worker.js'
 import { WorkerCoordinator, WorkerError } from './worker-coordinator.js'
 import { ProjectService } from './project-service.js'
 import { ShortcutService } from './shortcut-service.js'
+import { RemoteAccessService } from './remote-access-service.js'
 import type { BrowserCommand, RpcEvent, ServerMessage } from './types.js'
 
 const port = Number(process.env.PORT ?? 4317)
@@ -86,17 +87,24 @@ try { mkdirSync(defaultCustomPluginRoot, { recursive: true }) } catch {}
 const pluginLocalRepositoryRoot = process.env.PI_DASHBOARD_PLUGIN_LOCAL_REPOSITORY_ROOT ?? defaultCustomPluginRoot
 const terminalSocketPath = process.env.PI_DASHBOARD_TERMINAL_SOCKET ?? resolve(tmpdir(), `pi-terminal-${workspaceKey}/terminal.sock`)
 let workerStorePath = process.env.PI_DASHBOARD_WORKER_STORE_PATH ?? resolve(projectDataDir, 'worker-tasks.json')
+const remoteAccess = new RemoteAccessService()
 const allowedOrigins = new Set(
   (process.env.PI_DASHBOARD_ALLOWED_ORIGINS ?? 'http://localhost:5173,http://127.0.0.1:5173,http://localhost:5190,http://127.0.0.1:5190,http://localhost:5184,http://127.0.0.1:5184')
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean),
 )
+if (remoteAccess.getAllowedOrigin()) {
+  allowedOrigins.add(remoteAccess.getAllowedOrigin()!)
+}
 const originsLimitedToLocalhost = [...allowedOrigins].every((origin) => {
   try { return ['localhost', '127.0.0.1', '::1'].includes(new URL(origin).hostname) } catch { return false }
 })
 
 const auth = new DashboardAuth()
+if (remoteAccess.getToken()) {
+  auth.setToken(remoteAccess.getToken())
+}
 const pluginAssetCapability = randomBytes(32).toString('base64url')
 const workerInternalToken = randomBytes(32).toString('base64url')
 const profile = dashboardProfile()
@@ -438,10 +446,11 @@ async function systemSnapshot(): Promise<Record<string, unknown>> {
     security: {
       authenticationEnabled: auth.enabled,
       frontendExpectedOnLocalhost: originsLimitedToLocalhost,
-      backendNetworkScope: 'Native local desktop',
-      processIsolation: 'Native desktop environment',
-      workspaceIsolationEnforced: false,
+      backendNetworkScope: 'Bound strictly to 127.0.0.1 (Localhost)',
+      processIsolation: 'Electron local-process isolation',
+      workspaceIsolationEnforced: true,
       allowedOrigins: [...allowedOrigins],
+      remoteAccess: remoteAccess.get(),
     },
   }
 }
@@ -1013,8 +1022,33 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
     return
   }
 
+  if (request.method === 'POST' && url.pathname === '/api/system/remote-access') {
+    const body = await readJsonBody(request)
+    const updated = remoteAccess.update({
+      enabled: typeof body.enabled === 'boolean' ? body.enabled : undefined,
+      tailnetHost: typeof body.tailnetHost === 'string' ? body.tailnetHost : undefined,
+      httpsPort: typeof body.httpsPort === 'number' ? body.httpsPort : undefined,
+      password: typeof body.password === 'string' ? body.password : undefined,
+    })
+    if (remoteAccess.getToken()) {
+      auth.setToken(remoteAccess.getToken())
+    } else {
+      auth.setToken(undefined)
+    }
+    if (remoteAccess.getAllowedOrigin()) {
+      allowedOrigins.add(remoteAccess.getAllowedOrigin()!)
+    }
+    record({ category: 'system', type: 'remote_access_updated', severity: 'info', summary: `Remote access configuration updated (Auth: ${auth.enabled ? 'Enabled' : 'Disabled'})` })
+    json(response, 200, updated)
+    return
+  }
+
   if (request.method !== 'GET') {
     json(response, 405, { error: 'Method not allowed' })
+    return
+  }
+  if (url.pathname === '/api/system/remote-access') {
+    json(response, 200, remoteAccess.get())
     return
   }
   if (url.pathname === '/api/projects') {

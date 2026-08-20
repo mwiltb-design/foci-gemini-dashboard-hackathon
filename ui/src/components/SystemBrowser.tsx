@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { useSystemStatus, type AvailableModel, type SystemSnapshot } from '../hooks/useSystemStatus'
 import { Chip, Panel } from './Panel'
+import { RemoteAccessCard } from './RemoteAccessCard'
 
 function modelKey(provider?: string, id?: string): string {
   return provider && id ? `${provider}\u0000${id}` : ''
@@ -339,11 +340,13 @@ function SystemContent({ snapshot, busy, onActive, onDefaults, onCuratedMemorySa
 
         <MemoryCheckpointSettings memory={snapshot.backend.memoryCheckpoint} files={snapshot.backend.files} busy={busy} onSave={onMemorySave} onRun={onMemoryRun} onReset={onMemoryReset} />
 
+        <RemoteAccessCard />
+
         <section className="system-section system-security">
-          <header><div><span className="eyebrow">Security readiness</span><h2>Localhost boundary</h2></div><Chip tone="warning">hardening pending</Chip></header>
+          <header><div><span className="eyebrow">Security readiness</span><h2>Localhost boundary</h2></div><Chip tone={snapshot.security.authenticationEnabled ? 'accent' : 'warning'}>{snapshot.security.authenticationEnabled ? 'protected' : 'local only'}</Chip></header>
           <div className="system-readiness">
-            <div className={snapshot.security.frontendExpectedOnLocalhost ? 'is-ready' : ''}><span>{snapshot.security.frontendExpectedOnLocalhost ? '✓' : '!'}</span><div><strong>Local frontend binding</strong><small>Expected on localhost through Compose</small></div></div>
-            <div className={snapshot.security.authenticationEnabled ? 'is-ready' : ''}><span>{snapshot.security.authenticationEnabled ? '✓' : '!'}</span><div><strong>Application authentication</strong><small>{snapshot.security.authenticationEnabled ? 'Enabled' : 'Required before remote exposure'}</small></div></div>
+            <div className={snapshot.security.frontendExpectedOnLocalhost ? 'is-ready' : ''}><span>{snapshot.security.frontendExpectedOnLocalhost ? '✓' : '!'}</span><div><strong>Local frontend binding</strong><small>Bound to 127.0.0.1 (Local process)</small></div></div>
+            <div className={snapshot.security.authenticationEnabled ? 'is-ready' : ''}><span>{snapshot.security.authenticationEnabled ? '✓' : '!'}</span><div><strong>Application authentication</strong><small>{snapshot.security.authenticationEnabled ? 'Enabled (Password active)' : 'Local only (Password required for remote)'}</small></div></div>
             <div className={snapshot.security.workspaceIsolationEnforced ? 'is-ready' : ''}><span>{snapshot.security.workspaceIsolationEnforced ? '✓' : '!'}</span><div><strong>Workspace/process isolation</strong><small>{snapshot.security.processIsolation}</small></div></div>
             <div className="is-ready"><span>✓</span><div><strong>Backend network scope</strong><small>{snapshot.security.backendNetworkScope}</small></div></div>
           </div>
