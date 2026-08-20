@@ -55,7 +55,7 @@ export function FileBrowser({ workspaceRevision, editable }: { workspaceRevision
     const data = await memory.loadTier(type)
     if (data) {
       setMemoryDraft(data.content || '')
-      setMemoryMode('rendered')
+      setMemoryMode('edit')
     }
   }
 
