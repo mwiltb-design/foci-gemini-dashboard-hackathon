@@ -14,45 +14,65 @@ export const DEFAULT_CURATED_MEMORY_SETTINGS: CuratedMemorySettings = {
   skillEnabled: true,
 }
 
-export const USER_PROFILE_TEMPLATE = `# User profile
+export const USER_PROFILE_TEMPLATE = `# User Profile (USER.md)
 
 <!--
-Optional stable personal context. Add facts only after the user explicitly approves them.
-Do not infer or store credentials, secrets, raw conversation history, or temporary details.
+Facts about the user. The AI MUST ask permission before modifying this file.
 -->
 
-## Approved context
+## Personal Context & Background
+- **Name:** 
+- **Location:** 
+- **Role / Background:** 
 
+## User-Defined Skills & Strengths
+- 
+
+## Interests & Long-Term Goals
+- 
 `
 
 export const DASHBOARD_REFERENCE_MEMORY = `<!-- pi-dashboard-reference -->
 ## Pi Dashboard documentation
 
-When a question concerns Pi Dashboard behavior, configuration, troubleshooting, operations, plugins, skills, tools, or workers, consult the bundled routing file at \`/opt/pi-dashboard/server/skills/dashboard-reference/SKILL.md\`. Follow its routing to read only the relevant reference file; do not preload the complete documentation set.
+When a question concerns Pi Dashboard behavior, configuration, troubleshooting, operations, plugins, skills, tools, or workers, consult the bundled routing file in the dashboard reference skill. Follow its routing to read only the relevant reference file; do not preload the complete documentation set.
 `
 
-export const GLOBAL_MEMORY_TEMPLATE = `# Durable global memory
+export const GLOBAL_MEMORY_TEMPLATE = `# Global Collaboration Memory (MEMORY.md)
 
 <!--
-Durable cross-project collaboration patterns, environment facts, and reusable conventions.
-Keep entries concise. Exclude personal facts awaiting approval, secrets, raw logs, temporary work,
-and facts that are easy to rediscover.
+Cross-project communication preferences, interaction habits, and universal rules.
+Maintained collaboratively and refined during session checkpoints.
 -->
 
-## Collaboration and environment
+## Communication Preferences
+- When a question is asked, ALWAYS answer it first and stop. Never jump into coding before answering.
+- Explain commands and walk through steps; use a friendly and clear tone.
+- Target Windows PowerShell for terminal commands.
+- Prefer Python for automation scripts and Markdown for documentation.
 
-${DASHBOARD_REFERENCE_MEMORY}
+## Universal Development Conventions
+- Isolate Python dependencies using virtual environments (\`.venv\`).
+- Document script inputs, outputs, and requirements at the top of files.
+- Keep terminal commands safe and explain destructive actions before running.
 `
 
-export const PROJECT_MEMORY_TEMPLATE = `# Project memory
+export const PROJECT_MEMORY_TEMPLATE = `# Project Technical Memory (MEMORY.md)
 
 <!--
-Project-only architecture, decisions, conventions, implementation facts, lessons, status, and next steps.
-Do not store personal profile facts, credentials, secrets, or raw logs here.
+Living technical blueprint for this workspace. Ingested at the start of every session.
+Heavily curated, updated, and pruned by the AI during checkpoints.
 -->
 
-## Project context
+## Architecture & Tech Stack
+- **Framework / Language:** 
+- **Directory Layout:** 
 
+## Key Technical Decisions
+- 
+
+## Active Technical State & Milestones
+- 
 `
 
 export function normalizeCuratedMemorySettings(value: unknown): CuratedMemorySettings {

@@ -1,4 +1,4 @@
-﻿import { useCallback, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { apiFetch } from '../api'
 
 export type MemoryTierType = 'user' | 'global' | 'project'
@@ -17,29 +17,54 @@ export interface MemoryTierData {
 const STARTER_TEMPLATES: Record<MemoryTierType, string> = {
   user: `# User Profile (USER.md)
 
+<!--
+Facts about the user. The AI MUST ask permission before modifying this file.
+-->
+
+## Personal Context & Background
 - **Name:** 
 - **Location:** 
 - **Role / Background:** 
-- **User-Defined Skills:** 
-- **Interests & Goals:** 
+
+## User-Defined Skills & Strengths
+- 
+
+## Interests & Long-Term Goals
+- 
 `,
   global: `# Global Collaboration Memory (MEMORY.md)
 
+<!--
+Cross-project communication preferences, interaction habits, and universal rules.
+Maintained collaboratively and refined during session checkpoints.
+-->
+
 ## Communication Preferences
-- When a question is asked, ALWAYS answer it first and stop.
-- Explain commands and walk through steps for Windows PowerShell.
-- Prefer Python for scripts and Markdown for documentation.
+- When a question is asked, ALWAYS answer it first and stop. Never jump into coding before answering.
+- Explain commands and walk through steps; use a friendly and clear tone.
+- Target Windows PowerShell for terminal commands.
+- Prefer Python for automation scripts and Markdown for documentation.
+
+## Universal Development Conventions
+- Isolate Python dependencies using virtual environments (\`.venv\`).
+- Document script inputs, outputs, and requirements at the top of files.
+- Keep terminal commands safe and explain destructive actions before running.
 `,
   project: `# Project Technical Memory (MEMORY.md)
 
+<!--
+Living technical blueprint for this workspace. Ingested at the start of every session.
+Heavily curated, updated, and pruned by the AI during checkpoints.
+-->
+
 ## Architecture & Tech Stack
-- Framework / Language: 
-- Directory Layout: 
+- **Framework / Language:** 
+- **Directory Layout:** 
 
 ## Key Technical Decisions
 - 
 
-## Active Technical State
+## Active Technical State & Milestones
 - 
 `
 }
