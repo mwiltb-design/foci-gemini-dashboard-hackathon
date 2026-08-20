@@ -47,45 +47,33 @@ Check `PI_DASHBOARD_ALLOWED_ORIGINS`. It must include the exact browser origin, 
 https://mj-dell.tailcd1616.ts.net:8443
 ```
 
-Check `DASHBOARD_ALLOWED_HOSTS` for the Tailscale hostname.
+Check `DASHBOARD_ALLOWED_HOSTS` for the Tailscale hostname or configure it directly in the **Settings** tab.
 
-## Browser Shows Old Behavior After Rebuild
-
-Check whether the running container was actually recreated:
-
-```powershell
-docker compose ps --all
-docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Ports}}\t{{.Status}}"
-```
-
-Check the live page or headers rather than assuming the local source is what the browser sees.
+## Remote Access Not Responding
+1. Confirm the dashboard is running on your host computer (it must remain open for remote devices to connect).
+2. Check if Tailscale Serve background proxy is active:
+   ```powershell
+   tailscale serve status
+   ```
+3. If disconnected or reset, run the copyable command from the Settings tab:
+   ```powershell
+   tailscale serve --bg --https=8443 http://127.0.0.1:5173
+   ```
 
 ## Terminal Or Workers Missing
 
-Verify:
-
-```text
-PI_DASHBOARD_ADDONS=terminal,workers
-COMPOSE_PROFILES=terminal
-```
-
-Then inspect `/api/config`. The expected primary feature list includes:
+Verify that the features are enabled in your dashboard profile or settings. Then inspect `/api/config`. The expected primary feature list includes:
 
 ```text
 chat, files, files-editor, sessions, skills, settings, plugins, terminal, workers
 ```
 
-## Windows Limitation Warnings
-
-Docker Desktop bind mounts may appear with Linux UID/GID values that do not map cleanly to Windows accounts. That does not grant Windows administrator access. Terminal is still isolated to the mounted project path and has no Docker socket, Pi state, provider keys, or broad host mounts.
-
 ## Verification Pattern
 
 When debugging:
 
-1. Confirm the URL and local port.
-2. Confirm the Compose project and image.
-3. Verify auth and `/api/config`.
-4. Verify backend logs.
-5. Verify the exact response headers involved.
+1. Confirm the active UI port (`5173`) and Backend port (`4317`).
+2. Verify auth status via `/api/auth/status` or the Settings tab.
+3. Verify backend activity logs in the Activity / Diagnostics panel.
+4. Verify the exact response headers involved.
 6. Reproduce through the API before blaming the plugin UI.

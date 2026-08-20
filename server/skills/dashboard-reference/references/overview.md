@@ -1,29 +1,29 @@
 # Pi Dashboard Overview
 
-Pi Dashboard is a local-first workspace for working with Pi through a browser UI. It packages a frontend, a backend, and optional helper services in Docker Compose while keeping project files, Pi credentials, sessions, plugin state, and dashboard settings separated.
+Pi Dashboard 2.0 is a modern, native desktop application (built with Electron, React, Node.js, and TypeScript) and agent execution environment for the Pi Coding Agent. It keeps project files, Pi credentials, sessions, plugin state, and dashboard settings strictly separated.
 
 ## Primary Product Shape
 
-The current primary build is the core Dashboard with:
+The desktop build includes:
 
-- Chat
-- Files and file editing
-- Terminal
-- Sessions
+- Chat (Multi-Model AI pairing with streaming diffs)
+- Files and file editing (CodeMirror syntax-highlighted editor)
+- Native Terminal (PowerShell / Bash pseudo-terminal via `node-pty`)
+- Sessions & Session Branching
 - Skills and Tools
-- Workers, including Sub Pi
-- Plugins
-- Settings
+- Sub-Agent Workers (Background coordination)
+- Sandboxed Project Manager (`~/Pi-Dashboards/`)
+- Plugins (Local runtime & domain custom tool suites)
+- Remote Connectivity (In-app Tailscale Serve manager)
+- Settings & Windows Desktop Shortcut Creator
 
-Legacy Cron, Project Board, and Preview are intentionally not part of the primary build. Keep legacy versions as reference material for future plugin conversions.
+## Main Processes
 
-## Main Services
+- `Electron Shell` (`electron/main.cjs`): native desktop window lifecycle and multi-instance port resolution.
+- `Dashboard Backend` (`server/src/index.ts`): Node.js service managing Pi RPC, project files, sessions, skills, tools, and remote access. Bound strictly to `127.0.0.1:4317`.
+- `Dashboard UI` (`ui/src/`): React + Vite frontend bound strictly to `127.0.0.1:5173`. Proxies `/api`, `/ws`, and `/plugin-assets` to the backend.
 
-- `dashboard`: serves the React frontend with Vite preview.
-- `dashboard-backend`: owns authenticated API routes, Pi RPC, files, sessions, skills, tools, plugins, workers, and plugin hosted runtime requests.
-- `dashboard-terminal`: optional isolated project terminal service enabled by the `terminal` Compose profile.
-
-The backend stores private Dashboard/Pi state in the `pi-agent-data` Docker volume. The selected project folder is bind-mounted at `/workspace/project`.
+The backend stores private Dashboard state in `~/.pi-dashboard/` and provider credentials in `~/.pi/agent/`. Sandboxed user projects live in `~/Pi-Dashboards/<project>`.
 
 ## Feature Model
 

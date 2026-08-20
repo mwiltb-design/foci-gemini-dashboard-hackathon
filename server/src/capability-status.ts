@@ -18,8 +18,8 @@ export function terminalCapabilityStatus(profile: DashboardProfileName, enabled:
   const status = !enabled ? 'disabled' : socketReady ? 'ready' : 'unavailable'
   return {
     id: 'terminal',
-    name: 'Isolated Project Linux Terminal',
-    description: 'Offline project-only shell with no PI state, provider credentials, Docker socket, unrelated host folders, or network access.',
+    name: 'Integrated Project Terminal',
+    description: 'Embedded project shell with direct PowerShell/Bash execution, isolated to your active project workspace.',
     enabled,
     status,
     statusLabel: status === 'ready'

@@ -54,17 +54,27 @@ Pi-Dashboards/
 
 ---
 
+## 🔒 Private Remote Access with Tailscale Serve
+
+You can securely access your Pi Dashboard from your phone, iPad, or remote laptop over your private Tailnet without exposing any ports to the public internet:
+
+1. Open **Settings** in the dashboard and find **"Remote Connectivity & Tailscale Serve"**.
+2. Check **"Enable Tailscale Serve Remote Access"**.
+3. Enter your Tailnet hostname (e.g. `my-pc.tailnet.ts.net`) and set your custom password.
+4. Click **"💾 Save & Protect"**.
+5. Run the generated command in PowerShell on your host computer:
+   ```powershell
+   tailscale serve --bg --https=8443 http://127.0.0.1:5173
+   ```
+6. Visit `https://my-pc.tailnet.ts.net:8443` on your mobile browser, enter your password, and control your dashboard remotely!
+
+---
+
 ## ⚙️ Configuration & Ports
 
-By default, Pi-Dashboard 2.0 starts on **port `5173`** (UI) and **port `4317`** (Backend). 
-
-If port `5173` is busy, the desktop launcher automatically shifts to the next available port with zero collisions.
-
-To customize your environment, copy `.env.example` to `.env`:
-
-```bash
-cp .env.example .env
-```
+* **Default Ports:** UI on `127.0.0.1:5173` and Backend on `127.0.0.1:4317`.
+* **Zero Collisions:** Multi-window instances dynamically hunt the next open ports (`5174`, `4318`, etc.).
+* **Zero File Editing:** Configure your settings, projects, and Tailscale password directly in the dashboard UI.
 
 ---
 
