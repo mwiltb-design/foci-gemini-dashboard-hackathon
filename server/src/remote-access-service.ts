@@ -41,25 +41,11 @@ export class RemoteAccessService {
       }
     } catch {}
 
-    // Fallback to process.env if present
-    const envToken = process.env.PI_DASHBOARD_AUTH_TOKEN?.trim()
-    const envOrigin = process.env.PI_DASHBOARD_ALLOWED_ORIGINS?.split(',')[0]?.trim() || ''
-    let envHost = process.env.DASHBOARD_ALLOWED_HOSTS?.split(',')[0]?.trim() || ''
-    let envPort = 8443
-    if (envOrigin) {
-      try {
-        const u = new URL(envOrigin)
-        envHost = u.hostname
-        envPort = u.port ? Number(u.port) : 8443
-      } catch {}
-    }
-
-    const isTailnetHost = Boolean(envHost && !['localhost', '127.0.0.1'].includes(envHost))
     return {
-      enabled: Boolean(envToken || isTailnetHost),
-      tailnetHost: isTailnetHost ? envHost : '',
-      httpsPort: envPort,
-      authToken: envToken,
+      enabled: false,
+      tailnetHost: '',
+      httpsPort: 8443,
+      authToken: undefined,
     }
   }
 
