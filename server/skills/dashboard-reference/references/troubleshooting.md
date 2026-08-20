@@ -44,7 +44,7 @@ If the plugin still declares `http-unix-v1`, it expects a matching sidecar servi
 Check `PI_DASHBOARD_ALLOWED_ORIGINS`. It must include the exact browser origin, including scheme and port:
 
 ```text
-https://mj-dell.tailcd1616.ts.net:8443
+https://my-pc.tailnet.ts.net:8443
 ```
 
 Check `DASHBOARD_ALLOWED_HOSTS` for the Tailscale hostname or configure it directly in the **Settings** tab.
