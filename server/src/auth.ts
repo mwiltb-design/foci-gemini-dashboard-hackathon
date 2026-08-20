@@ -17,14 +17,15 @@ function cookieValue(headers: IncomingHttpHeaders): string | undefined {
   return undefined
 }
 
-function configuredToken(): string | undefined {
-  const token = process.env.PI_DASHBOARD_AUTH_TOKEN?.trim()
-  return token ? token : undefined
-}
-
 export class DashboardAuth {
   private readonly sessions = new Map<string, number>()
-  private token = configuredToken()
+  private token: string | undefined = undefined
+
+  constructor(initialToken?: string) {
+    if (initialToken) {
+      this.setToken(initialToken)
+    }
+  }
 
   get enabled(): boolean {
     return this.token !== undefined

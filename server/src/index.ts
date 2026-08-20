@@ -101,10 +101,7 @@ const originsLimitedToLocalhost = [...allowedOrigins].every((origin) => {
   try { return ['localhost', '127.0.0.1', '::1'].includes(new URL(origin).hostname) } catch { return false }
 })
 
-const auth = new DashboardAuth()
-if (remoteAccess.getToken()) {
-  auth.setToken(remoteAccess.getToken())
-}
+const auth = new DashboardAuth(remoteAccess.getToken())
 const pluginAssetCapability = randomBytes(32).toString('base64url')
 const workerInternalToken = randomBytes(32).toString('base64url')
 const profile = dashboardProfile()
