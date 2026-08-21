@@ -107,14 +107,14 @@ const workerInternalToken = randomBytes(32).toString('base64url')
 const profile = dashboardProfile()
 const enabledFeatures = new Set<DashboardFeature>(profile.features)
 let rpcArgs = ['--mode', 'rpc', '--continue', '--name', 'Pi Dashboard', '--extension', runtimeInfoExtension, '--extension', curatedMemoryExtension, '--extension', memoryCheckpointExtension, '--extension', pluginToolsExtension, ...(enabledFeatures.has('workers') ? ['--extension', workersExtension] : []), ...(rpcSessionDir ? ['--session-dir', rpcSessionDir] : [])]
-let rpc = new PiRpcProcess({ cwd: workspace, args: rpcArgs, env: { PI_DASHBOARD_WORKER_INTERNAL_TOKEN: workerInternalToken } })
+let rpc = registerRpcListeners(new PiRpcProcess({ cwd: workspace, args: rpcArgs, env: { PI_DASHBOARD_WORKER_INTERNAL_TOKEN: workerInternalToken } }))
 let sessions = new SessionCatalog(sessionRoot, workspace)
 let sessionArchive = new SessionArchiveService(sessionArchivePath)
 let files = new FileService(workspace)
 let git = new GitService(workspace)
 let skills = new SkillService(workspace, agentDir)
-const system = new SystemService(workspace, agentDir)
-const onboarding = new OnboardingService(workspace, agentDir, defaultDashboardDataDir)
+let system = new SystemService(workspace, agentDir)
+let onboarding = new OnboardingService(workspace, agentDir, defaultDashboardDataDir)
 const projectService = new ProjectService()
 const tools = new ToolService(runtimeInfoPath)
 let plugins = new PluginService({ bundledRoot: pluginCodeRoot, stateRoot: pluginStateRoot, workspaceRoot: workspace, runtimeSocketRoot: pluginRuntimeSocketRoot, assetCapability: pluginAssetCapability, localRepositoryRoot: pluginLocalRepositoryRoot })
@@ -276,6 +276,8 @@ async function switchActiveWorkspace(targetWorkspace: string): Promise<{ workspa
   files = new FileService(workspace)
   git = new GitService(workspace)
   skills = new SkillService(workspace, agentDir)
+  system = new SystemService(workspace, agentDir)
+  onboarding = new OnboardingService(workspace, agentDir, defaultDashboardDataDir)
   plugins = new PluginService({ bundledRoot: pluginCodeRoot, stateRoot: pluginStateRoot, workspaceRoot: workspace, runtimeSocketRoot: pluginRuntimeSocketRoot, assetCapability: pluginAssetCapability, localRepositoryRoot: pluginLocalRepositoryRoot })
   activity = new ActivityStore(activityPath)
   subPi = new SubPiWorkerAdapter({ workspace, sessionDir: currentRpcSessionDir, pluginToolsExtension, git, enabled: enabledFeatures.has('workers') })
@@ -294,7 +296,7 @@ async function switchActiveWorkspace(targetWorkspace: string): Promise<{ workspa
   })
 
   rpcArgs = ['--mode', 'rpc', '--continue', '--name', 'Pi Dashboard', '--extension', runtimeInfoExtension, '--extension', curatedMemoryExtension, '--extension', memoryCheckpointExtension, '--extension', pluginToolsExtension, ...(enabledFeatures.has('workers') ? ['--extension', workersExtension] : []), '--session-dir', currentRpcSessionDir]
-  rpc = new PiRpcProcess({ cwd: workspace, args: rpcArgs, env: { PI_DASHBOARD_WORKER_INTERNAL_TOKEN: workerInternalToken } })
+  rpc = registerRpcListeners(new PiRpcProcess({ cwd: workspace, args: rpcArgs, env: { PI_DASHBOARD_WORKER_INTERNAL_TOKEN: workerInternalToken } }))
 
   await Promise.all([
     activity.initialize(),
@@ -470,62 +472,66 @@ function queueManagement(task: () => Promise<void>): Promise<void> {
   return result
 }
 
-rpc.on('event', (event: RpcEvent) => {
-  broadcast({ type: 'event', event })
+function registerRpcListeners(instance: PiRpcProcess): PiRpcProcess {
+  instance.on('event', (event: RpcEvent) => {
+    broadcast({ type: 'event', event })
 
-  if (event.type === 'agent_start') {
-    currentRunId = randomUUID()
-    record({ category: 'session', type: 'run_start', severity: 'info', summary: 'Pi started a run', sessionId: currentSessionId, runId: currentRunId })
-  } else if (event.type === 'agent_settled') {
-    record({ category: 'session', type: 'run_settled', severity: 'info', summary: 'Pi run settled', sessionId: currentSessionId, runId: currentRunId })
-    currentRunId = undefined
-    void chatStateSnapshot()
-      .then((snapshot) => {
-        rememberState(snapshot)
-        broadcast({ type: 'state', state: snapshot })
-        broadcast({ type: 'sessions_changed' })
-        broadcast({ type: 'workspace_changed' })
+    if (event.type === 'agent_start') {
+      currentRunId = randomUUID()
+      record({ category: 'session', type: 'run_start', severity: 'info', summary: 'Pi started a run', sessionId: currentSessionId, runId: currentRunId })
+    } else if (event.type === 'agent_settled') {
+      record({ category: 'session', type: 'run_settled', severity: 'info', summary: 'Pi run settled', sessionId: currentSessionId, runId: currentRunId })
+      currentRunId = undefined
+      void chatStateSnapshot()
+        .then((snapshot) => {
+          rememberState(snapshot)
+          broadcast({ type: 'state', state: snapshot })
+          broadcast({ type: 'sessions_changed' })
+          broadcast({ type: 'workspace_changed' })
+        })
+        .catch((error: Error) => {
+          record({ category: 'error', type: 'state_refresh_failed', severity: 'error', summary: error.message, sessionId: currentSessionId })
+          broadcast({ type: 'error', message: error.message })
+        })
+    } else if (event.type === 'tool_execution_start') {
+      const toolCallId = typeof event.toolCallId === 'string' ? event.toolCallId : randomUUID()
+      toolStartTimes.set(toolCallId, Date.now())
+      record({
+        category: 'tool', type: 'tool_start', severity: 'info', summary: `Started ${String(event.toolName ?? 'tool')}`,
+        sessionId: currentSessionId, runId: currentRunId, correlationId: toolCallId,
+        data: { toolName: String(event.toolName ?? 'tool') },
       })
-      .catch((error: Error) => {
-        record({ category: 'error', type: 'state_refresh_failed', severity: 'error', summary: error.message, sessionId: currentSessionId })
-        broadcast({ type: 'error', message: error.message })
+    } else if (event.type === 'tool_execution_end') {
+      const toolCallId = typeof event.toolCallId === 'string' ? event.toolCallId : undefined
+      const started = toolCallId ? toolStartTimes.get(toolCallId) : undefined
+      if (toolCallId) toolStartTimes.delete(toolCallId)
+      const failed = Boolean(event.isError)
+      record({
+        category: failed ? 'error' : 'tool', type: 'tool_end', severity: failed ? 'error' : 'info',
+        summary: `${failed ? 'Failed' : 'Completed'} ${String(event.toolName ?? 'tool')}`,
+        sessionId: currentSessionId, runId: currentRunId, correlationId: toolCallId,
+        data: { toolName: String(event.toolName ?? 'tool'), ...(started ? { durationMs: Date.now() - started } : {}) },
       })
-  } else if (event.type === 'tool_execution_start') {
-    const toolCallId = typeof event.toolCallId === 'string' ? event.toolCallId : randomUUID()
-    toolStartTimes.set(toolCallId, Date.now())
-    record({
-      category: 'tool', type: 'tool_start', severity: 'info', summary: `Started ${String(event.toolName ?? 'tool')}`,
-      sessionId: currentSessionId, runId: currentRunId, correlationId: toolCallId,
-      data: { toolName: String(event.toolName ?? 'tool') },
-    })
-  } else if (event.type === 'tool_execution_end') {
-    const toolCallId = typeof event.toolCallId === 'string' ? event.toolCallId : undefined
-    const started = toolCallId ? toolStartTimes.get(toolCallId) : undefined
-    if (toolCallId) toolStartTimes.delete(toolCallId)
-    const failed = Boolean(event.isError)
-    record({
-      category: failed ? 'error' : 'tool', type: 'tool_end', severity: failed ? 'error' : 'info',
-      summary: `${failed ? 'Failed' : 'Completed'} ${String(event.toolName ?? 'tool')}`,
-      sessionId: currentSessionId, runId: currentRunId, correlationId: toolCallId,
-      data: { toolName: String(event.toolName ?? 'tool'), ...(started ? { durationMs: Date.now() - started } : {}) },
-    })
-  } else if (event.type === 'extension_error') {
-    record({ category: 'error', type: 'extension_error', severity: 'error', summary: String(event.error ?? 'Extension failed'), sessionId: currentSessionId, runId: currentRunId })
-  }
-})
+    } else if (event.type === 'extension_error') {
+      record({ category: 'error', type: 'extension_error', severity: 'error', summary: String(event.error ?? 'Extension failed'), sessionId: currentSessionId, runId: currentRunId })
+    }
+  })
 
-rpc.on('ready', () => {
-  record({ category: 'system', type: 'rpc_ready', severity: 'info', summary: 'Pi RPC started' })
-  broadcast({ type: 'connection', status: 'connected' })
-})
-rpc.on('exit', (error: Error) => {
-  record({ category: 'error', type: 'rpc_exit', severity: 'error', summary: error.message, sessionId: currentSessionId })
-  broadcast({ type: 'connection', status: 'error', message: error.message })
-})
-rpc.on('protocolError', (error: Error) => {
-  record({ category: 'error', type: 'rpc_protocol_error', severity: 'error', summary: error.message, sessionId: currentSessionId })
-  broadcast({ type: 'error', message: error.message })
-})
+  instance.on('ready', () => {
+    record({ category: 'system', type: 'rpc_ready', severity: 'info', summary: 'Pi RPC started' })
+    broadcast({ type: 'connection', status: 'connected' })
+  })
+  instance.on('exit', (error: Error) => {
+    record({ category: 'error', type: 'rpc_exit', severity: 'error', summary: error.message, sessionId: currentSessionId })
+    broadcast({ type: 'connection', status: 'error', message: error.message })
+  })
+  instance.on('protocolError', (error: Error) => {
+    record({ category: 'error', type: 'rpc_protocol_error', severity: 'error', summary: error.message, sessionId: currentSessionId })
+    broadcast({ type: 'error', message: error.message })
+  })
+
+  return instance
+}
 
 function json(response: ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, {

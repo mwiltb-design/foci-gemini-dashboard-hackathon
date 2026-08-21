@@ -148,6 +148,7 @@ export function usePiChat() {
   const reconnectTimer = useRef<number | null>(null)
   const reconnectAttempts = useRef(0)
   const currentAssistant = useRef<string | null>(null)
+  const optimisticUser = useRef<{ id: string; text: string } | null>(null)
   const newSessionPrefill = useRef('')
 
   const appendNotice = useCallback((text: string, tone: ChatNoticeItem['tone'] = 'info') => {
@@ -163,11 +164,14 @@ export function usePiChat() {
         setRunning(false)
         setPendingCommand(false)
         currentAssistant.current = null
+        optimisticUser.current = null
         break
       case 'message_start': {
         const message = event.message as Record<string, unknown> | undefined
         if (message?.role === 'user') {
-          setItems((current) => [...current, { type: 'message', id: nextId('user'), role: 'user', text: textFromContent(message.content) }])
+          const text = textFromContent(message.content)
+          if (optimisticUser.current?.text === text) optimisticUser.current = null
+          else setItems((current) => [...current, { type: 'message', id: nextId('user'), role: 'user', text }])
         } else if (message?.role === 'assistant') {
           const id = nextId('assistant')
           currentAssistant.current = id
@@ -187,6 +191,28 @@ export function usePiChat() {
           const reason = String(delta.reason ?? 'error')
           setItems((current) => current.map((item) => item.type === 'message' && item.id === id ? { ...item, error: reason === 'aborted' ? 'Stopped' : 'Response failed' } : item))
         }
+        break
+      }
+      case 'message_end': {
+        const message = event.message as Record<string, unknown> | undefined
+        if (message?.role !== 'assistant') break
+        const id = currentAssistant.current
+        const text = textFromContent(message.content)
+        const thinking = thinkingFromContent(message.content)
+        setItems((current) => {
+          if (!id) {
+            return text || thinking
+              ? [...current, { type: 'message', id: nextId('assistant'), role: 'assistant', text, ...(thinking ? { thinking } : {}) }]
+              : current
+          }
+          if (!text && !thinking) {
+            return current.filter((item) => !(item.type === 'message' && item.id === id && !item.error))
+          }
+          return current.map((item) => item.type === 'message' && item.id === id
+            ? { ...item, text, ...(thinking ? { thinking } : { thinking: undefined }) }
+            : item)
+        })
+        currentAssistant.current = null
         break
       }
       case 'tool_execution_start': {
@@ -336,7 +362,12 @@ export function usePiChat() {
 
   const prompt = useCallback((message: string): boolean => {
     const accepted = send({ type: 'prompt', message })
-    if (accepted) setPendingCommand(true)
+    if (accepted) {
+      const id = nextId('user')
+      optimisticUser.current = { id, text: message }
+      setItems((current) => [...current, { type: 'message', id, role: 'user', text: message }])
+      setPendingCommand(true)
+    }
     return accepted
   }, [send])
 
