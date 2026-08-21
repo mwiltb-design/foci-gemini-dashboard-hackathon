@@ -76,6 +76,17 @@ export class ProviderLoginSession {
     browser.on('message', (data) => {
       if (this.ptyProcess !== proc) return
       const text = typeof data === 'string' ? data : Buffer.isBuffer(data) ? data.toString('utf8') : new TextDecoder().decode(data as ArrayBuffer)
+      try {
+        const parsed = JSON.parse(text)
+        if (parsed.type === 'resize' && typeof parsed.cols === 'number' && typeof parsed.rows === 'number') {
+          proc.resize(Math.max(20, Math.min(200, parsed.cols)), Math.max(5, Math.min(100, parsed.rows)))
+          return
+        }
+        if (parsed.type === 'input' && typeof parsed.data === 'string') {
+          proc.write(parsed.data)
+          return
+        }
+      } catch {}
       proc.write(text)
     })
 

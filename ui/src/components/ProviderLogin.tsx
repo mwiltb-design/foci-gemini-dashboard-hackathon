@@ -49,16 +49,35 @@ export function ProviderLogin() {
     const fit = new FitAddon()
     terminal.loadAddon(fit)
     terminal.open(element)
-    const observer = new ResizeObserver(() => { try { fit.fit() } catch { /* hidden or unmounted */ } })
-    observer.observe(element)
-    fit.fit()
-    terminal.writeln('\x1b[38;5;245mOpening Pi provider login inside Dashboard…\x1b[0m')
 
     const connection = new WebSocket(socketUrl())
     connection.binaryType = 'arraybuffer'
     socket.current = connection
     const decoder = new TextDecoder()
     let linkBuffer = ''
+
+    const sendResize = () => {
+      if (connection.readyState === WebSocket.OPEN) {
+        connection.send(JSON.stringify({ type: 'resize', cols: terminal.cols, rows: terminal.rows }))
+      }
+    }
+
+    const resize = () => {
+      try {
+        fit.fit()
+        sendResize()
+      } catch { /* hidden or unmounted */ }
+    }
+
+    const observer = new ResizeObserver(resize)
+    observer.observe(element)
+    resize()
+    terminal.focus()
+
+    connection.onopen = () => {
+      resize()
+      terminal.writeln('\x1b[38;5;245mConnected to Pi provider login.\x1b[0m\r\n')
+    }
 
     connection.onmessage = (event) => {
       const bytes = typeof event.data === 'string' ? new TextEncoder().encode(event.data) : new Uint8Array(event.data as ArrayBuffer)
