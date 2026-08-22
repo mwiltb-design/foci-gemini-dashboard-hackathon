@@ -1,9 +1,9 @@
-﻿import { spawn, type ChildProcess } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { GitService, GitStatusEntry } from './git-service.js'
-import { processGroupOptions, terminateProcess } from './process-control.js'
+import { processGroupOptions, resolveExecutable, terminateProcess } from './process-control.js'
 import type { WorkerAdapter, WorkerChangedFile, WorkerMode, WorkerProviderStatus, WorkerRunHooks, WorkerRunInput, WorkerRunOutput } from './worker-types.js'
 
 function boundedText(value: string, limit: number): { text: string; truncated: boolean } {
@@ -82,17 +82,21 @@ export class AntigravityWorkerAdapter implements WorkerAdapter {
     if (this.active) throw new Error('Antigravity CLI is already running another task')
     const before = (await this.options.git.status()).entries
     const timeout = `${Math.max(60, Math.ceil(input.bounds.timeoutMs / 1_000))}s`
-    const command = process.platform === 'win32' ? 'agy.cmd' : 'agy'
+    const command = resolveExecutable('agy')
     const args = [
-      '--print', workerPrompt(input), '--sandbox', '--disable-slash-commands',
-      '--output-format', 'text', '--print-timeout', timeout,
+      '--print', workerPrompt(input),
+      '--sandbox',
+      '--disable-slash-commands',
+      ...(input.mode === 'implement' ? ['--dangerously-skip-permissions'] : []),
+      '--output-format', 'text',
+      '--print-timeout', timeout,
     ]
 
     const child = spawn(command, args, {
       cwd: this.options.workspace,
       env: cleanEnvironment(),
       stdio: ['ignore', 'pipe', 'pipe'],
-      shell: process.platform === 'win32',
+      windowsHide: true,
       ...processGroupOptions(),
     })
 

@@ -1,9 +1,9 @@
-﻿import { spawn, type ChildProcess } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { GitService, GitStatusEntry } from './git-service.js'
-import { processGroupOptions, terminateProcess } from './process-control.js'
+import { processGroupOptions, resolveExecutable, terminateProcess } from './process-control.js'
 import type { WorkerAdapter, WorkerChangedFile, WorkerMode, WorkerProviderStatus, WorkerRunHooks, WorkerRunInput, WorkerRunOutput } from './worker-types.js'
 
 function boundedText(value: string, limit: number): { text: string; truncated: boolean } {
@@ -79,7 +79,7 @@ export class ClaudeWorkerAdapter implements WorkerAdapter {
   async run(input: WorkerRunInput, hooks: WorkerRunHooks): Promise<WorkerRunOutput> {
     if (this.active) throw new Error('Claude CLI is already running another task')
     const before = (await this.options.git.status()).entries
-    const command = process.platform === 'win32' ? 'claude.cmd' : 'claude'
+    const command = resolveExecutable('claude')
     const args = [
       '-p', claudePrompt(input),
       '--output-format', 'text',
@@ -89,7 +89,7 @@ export class ClaudeWorkerAdapter implements WorkerAdapter {
       cwd: this.options.workspace,
       env: cleanEnvironment(),
       stdio: ['ignore', 'pipe', 'pipe'],
-      shell: process.platform === 'win32',
+      windowsHide: true,
       ...processGroupOptions(),
     })
 

@@ -1,10 +1,10 @@
-﻿import { spawn, type ChildProcess } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import type { GitService, GitStatusEntry } from './git-service.js'
-import { processGroupOptions, terminateProcess } from './process-control.js'
+import { processGroupOptions, resolveExecutable, terminateProcess } from './process-control.js'
 import type { WorkerAdapter, WorkerChangedFile, WorkerMode, WorkerProviderStatus, WorkerRunHooks, WorkerRunInput, WorkerRunOutput } from './worker-types.js'
 
 function boundedText(value: string, limit: number): { text: string; truncated: boolean } {
@@ -80,7 +80,7 @@ export class CodexWorkerAdapter implements WorkerAdapter {
   async run(input: WorkerRunInput, hooks: WorkerRunHooks): Promise<WorkerRunOutput> {
     if (this.active) throw new Error('Codex CLI is already running another task')
     const before = (await this.options.git.status()).entries
-    const command = process.platform === 'win32' ? 'codex.cmd' : 'codex'
+    const command = resolveExecutable('codex')
     const args = [
       'exec', '--json', '--ephemeral', '--skip-git-repo-check',
       '--sandbox', input.mode === 'implement' ? 'workspace-write' : 'read-only',
@@ -91,7 +91,7 @@ export class CodexWorkerAdapter implements WorkerAdapter {
       cwd: this.options.workspace,
       env: cleanEnvironment(),
       stdio: ['ignore', 'pipe', 'pipe'],
-      shell: process.platform === 'win32',
+      windowsHide: true,
       ...processGroupOptions(),
     })
 
