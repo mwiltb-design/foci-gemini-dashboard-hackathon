@@ -8,8 +8,9 @@ This reference is the authoritative implementation map for all Dashboard plugin 
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Static Workspace Plugin** | Calculators, reference cards, visualizers, browser games | Workspace: `plugins/<id>/` | None | None | `[]` | `workspace:plugins/<id>` (Plugins page review) | **None** |
 | **Hosted Agent-Connected Workspace Plugin** | Project task lists, custom logs, databases, tools Pi can query or mutate | Workspace: `plugins/<id>/` | `protocol: "host-module"`, `module: "server.ts"` | Supported (`/agent/*` tools, `skills/`) | `plugin-data:read`, `plugin-data:write` | `workspace:plugins/<id>` (Plugins page review) | **None** |
-| **Local Machine Plugin** | Private developer plugins stored across projects | `~/.pi/agent/plugins/<id>/` | Optional `host-module` | Optional `/agent/*` | Supported | `local:<id>` (Plugins page review) | **None** |
-| **Bundled First-Party Plugin** | Core plugins shipped with Dashboard (e.g. `notes`) | Dashboard: `plugins/<id>/` | `protocol: "host-module"` | Supported | Supported | Auto-discovered at Dashboard startup | Server restart on file change |
+| **Local Machine Plugin** | Private developer plugins stored across projects | `~/.pi-dashboard/plugins/<id>/` | Optional `host-module` | Optional `/agent/*` | Supported | `local:<id>` (Plugins page review) | **None** |
+| **Bundled Static Plugin** | Static built-in reference or visualization tools | Dashboard: `plugins/<id>/` | None | None | `[]` | Auto-discovered at Dashboard startup | Server restart on file change |
+| **Bundled Hosted Plugin** | Core plugins shipped with Dashboard (e.g. `notes`) | Dashboard: `plugins/<id>/` | `protocol: "host-module"` | Supported | Supported | Auto-discovered at Dashboard startup | Server restart on file change |
 
 ---
 
@@ -79,7 +80,7 @@ git init
 git add -A
 git commit -m "feat: initial calculator plugin"
 ```
-Install in Dashboard: **Plugins** → **Add plugin** → Enter `workspace:plugins/quick-calc` → **Review repository** → **Install plugin**.
+Install in Dashboard: **Plugins** → **Add plugin** → Enter `workspace:plugins/quick-calc` → **Review exact commit** → Check *I trust this exact commit...* → **Trust and install**.
 
 ---
 
@@ -175,29 +176,27 @@ interface Task {
   completed: boolean
 }
 
+const MAX_TASKS = 100
+
 export default {
   async handle(request: any, context: any) {
-    // 1. UI route: GET /api/tasks
-    if (request.method === 'GET' && request.path === '/api/tasks') {
+    // 1. UI and agent read route: GET /api/tasks or /agent/tasks
+    if (request.method === 'GET' && (request.path === '/api/tasks' || request.path === '/agent/tasks')) {
       const tasks = await context.storage.readJson('tasks.json', [])
-      return context.json(tasks)
+      return context.json(request.path === '/agent/tasks' ? { tasks } : tasks)
     }
 
-    // 2. Pi read tool route: GET /agent/tasks
-    if (request.method === 'GET' && request.path === '/agent/tasks') {
-      const tasks = await context.storage.readJson('tasks.json', [])
-      return context.json({ tasks })
-    }
-
-    // 3. Pi write tool route: POST /agent/tasks
+    // 2. Pi write tool route: POST /agent/tasks
     if (request.method === 'POST' && request.path === '/agent/tasks') {
       const body = request.json()
       const title = String(body.title || '').trim()
       if (!title) return context.json({ error: 'Title is required' }, 400)
+      if (title.length > 120) return context.json({ error: 'Title must not exceed 120 characters' }, 400)
 
       const task: Task = { id: `task-${Date.now()}`, title, completed: false }
       await context.storage.transaction(async (tx: any) => {
         const list = await tx.readJson('tasks.json', [])
+        if (list.length >= MAX_TASKS) list.shift()
         list.push(task)
         await tx.writeJson('tasks.json', list)
       })
@@ -211,28 +210,45 @@ export default {
 
 **`app.js` (Frontend PostMessage Bridge):**
 ```javascript
-async function requestRuntime(method, path, body) {
+const pluginId = 'project-todo'
+const pending = new Map()
+
+function requestRuntime(method, path, body) {
   const requestId = crypto.randomUUID()
   return new Promise((resolve, reject) => {
-    function onMessage(event) {
-      if (event.data?.type === 'runtime-response' && event.data?.requestId === requestId) {
-        window.removeEventListener('message', onMessage)
-        if (event.data.status >= 200 && event.data.status < 300) resolve(event.data.body)
-        else reject(new Error(event.data.body?.error || `Status ${event.data.status}`))
-      }
-    }
-    window.addEventListener('message', onMessage)
+    const timer = setTimeout(() => {
+      pending.delete(requestId)
+      reject(new Error('Plugin request timed out'))
+    }, 10000)
+    pending.set(requestId, { resolve, reject, timer })
     parent.postMessage({
       schemaVersion: 1,
-      pluginId: 'project-todo',
+      pluginId,
       type: 'runtime-request',
       requestId,
       method,
       path,
-      body,
+      ...(body === undefined ? {} : { body }),
     }, '*')
   })
 }
+
+window.addEventListener('message', (event) => {
+  if (event.source !== parent) return
+  const message = event.data
+  if (!message || message.schemaVersion !== 1 || message.pluginId !== pluginId) return
+  if (message.type === 'host-ready') {
+    void refresh()
+    return
+  }
+  if (message.type !== 'runtime-response') return
+  const request = pending.get(message.requestId)
+  if (!request) return
+  clearTimeout(request.timer)
+  pending.delete(message.requestId)
+  if (message.status >= 200 && message.status < 300) request.resolve(message.body)
+  else request.reject(new Error(message.body?.error || `Request failed (${message.status})`))
+})
 ```
 
 **`skills/project-todo-guide/SKILL.md`:**
@@ -256,17 +272,18 @@ git add -A
 git commit -m "feat: initial project-todo plugin"
 ```
 Install in Dashboard:
-1. **Plugins** → **Add plugin** → Enter `workspace:plugins/project-todo` → **Review repository** → **Install plugin**.
+1. **Plugins** → **Add plugin** → Enter `workspace:plugins/project-todo` → **Review exact commit** → Check *I trust this exact commit...* → **Trust and install**.
 2. Click **Enable** on the plugin card.
 3. Under **Pi Access**, click **Grant read access** and **Grant write access** to allow Pi to execute the to-do tools.
 4. **No Dashboard rebuild or restart is required!**
 
 ---
 
-### Example C: Bundled First-Party Hosted Plugin
+### Example C: Bundled First-Party Plugins
 For plugins distributed with the Dashboard codebase itself:
 - Located directly in `plugins/<plugin-id>/` (e.g. `plugins/notes/`).
 - Discovered automatically when the Dashboard backend boots.
+- Can be static frontends or hosted backends (`host-module`).
 - Does not need git repository initialization inside the plugin directory.
 
 ---
@@ -274,7 +291,7 @@ For plugins distributed with the Dashboard codebase itself:
 ## 5. Security & Isolation Constraints
 
 - **Iframe Sandbox:** Ran with `sandbox="allow-scripts allow-forms"`. Direct DOM access to parent Dashboard or cookie access is denied.
-- **Storage Isolation:** Host storage is strictly namespaced under `~/.pi/agent/dashboard/plugins/data/<plugin-id>`. Path traversal (`..`) is blocked.
+- **Storage Isolation:** Host storage is strictly namespaced under `~/.pi-dashboard/projects/<project-id>/plugin-data/data/<plugin-id>`. Path traversal (`..`) is blocked.
 - **Tool Protocol:** Pi tools must use `/agent/*` route prefixes. Parameter schemas must be explicit JSON Schema objects.
 - **Decoupled Permissions:** Enabling a plugin does **not** grant Pi tools access. Users must explicitly grant Pi **Read** and **Write** permissions in the UI.
 
@@ -291,4 +308,4 @@ Before handing off a plugin:
    - Tools are inactive when grants are disabled.
    - Read tools function when Read grant is enabled.
    - Write tools function when Write grant is enabled.
-6. **Workspace Build:** Run `npm run build` from the workspace root to confirm TypeScript compiles cleanly.
+6. **Workspace Build:** Run `npm run build` from the Dashboard source repository root to confirm TypeScript compiles cleanly.

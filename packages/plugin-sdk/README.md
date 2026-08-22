@@ -93,11 +93,11 @@ For plugins that provide persistent data, server logic, or Pi agent tools and sk
   - `module`: Relative path to server script (e.g. `server.ts` or `server.js`).
 - **`agent.tools`**: Array of 1–24 tool declarations. Paths must start with `/agent/`. Each tool requires an explicit `access` classification (`"read"` or `"write"`).
 - **`agent.skills`**: Array of skill declarations pointing to directories with a `SKILL.md` file.
-- **`permissions`**: Supported permissions:
+- **`permissions`**:
   - `plugin-data:read`: Read from plugin-private storage.
   - `plugin-data:write`: Write to plugin-private storage.
-  - `dashboard-theme:read`: Read current dashboard theme.
-  - `dashboard-notifications:write`: Send dashboard notifications.
+  - `dashboard-theme:read`: Reserved/recognized permission for future dashboard theme reading.
+  - `dashboard-notifications:write`: Reserved/recognized permission for future dashboard notifications.
 
 ## Frontend to Host PostMessage Bridge
 
@@ -121,9 +121,9 @@ parent.postMessage({
 ## Repository Installation & Lifecycle
 
 Repository plugins are reviewed from a pinned Git commit and verified with a SHA256 digest:
-- Supported repository formats: `workspace:plugins/<id>`, `local:<id>`, or `https://github.com/<owner>/<repo>`.
-- Installed to `~/.pi/agent/dashboard/plugins/installed/<id>`.
-- One previous version is retained in `backups/code/` for instant rollback.
-- Data is isolated under `~/.pi/agent/dashboard/plugins/data/<id>`.
+- Supported repository formats: `workspace:plugins/<id>` (inside active project workspace), `local:<id>` (in `~/.pi-dashboard/plugins/<id>`), or `https://github.com/<owner>/<repo>`.
+- Installed to project-scoped storage: `~/.pi-dashboard/projects/<project-id>/plugin-data/installed/<id>`.
+- One previous version is retained in `~/.pi-dashboard/projects/<project-id>/plugin-data/backups/code/<id>` for instant rollback.
+- Data is isolated under `~/.pi-dashboard/projects/<project-id>/plugin-data/data/<id>`.
 - Removing a plugin allows choosing between retaining or permanently deleting its stored data.
 

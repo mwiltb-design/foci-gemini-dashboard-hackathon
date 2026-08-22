@@ -31,7 +31,7 @@ Before changing any files, choose the exact path:
    - Manifest: `entry.frontend`, `entry.backend` (`protocol: "host-module"`, `module: "server.ts"`), optional `agent.tools` (`/agent/*`), optional `agent.skills`, permissions.
    - Install identifier: `workspace:plugins/<plugin-id>`.
 3. **Local Machine Plugin:**
-   - Location: User local plugins directory `~/.pi/agent/plugins/<plugin-id>`.
+   - Location: User local plugins directory `~/.pi-dashboard/plugins/<plugin-id>`.
    - Install identifier: `local:<plugin-id>`.
 4. **Bundled First-Party Plugin:**
    - Location: Dashboard repository root `plugins/<plugin-id>`.
@@ -63,7 +63,7 @@ Before editing, state the chosen path and the files you expect to touch.
 
 ## 4. Verify and Hand Off
 
-Follow the acceptance checks in [references/contract.md](references/contract.md). Test the interface and, if agent tools are present, verify tool behavior with Pi read/write grants disabled and enabled.
+Follow the acceptance checks in [references/contract.md](references/contract.md). Test the interface and, if agent tools are present, verify tool behavior with Pi read/write grants disabled and enabled. If checking TypeScript compilation across the dashboard, run `npm run build` from the **Dashboard source repository root** (running it inside the active project workspace will fail).
 
 ### Required Authoring Handoff Checklist:
 Every plugin delivery must include:
@@ -74,7 +74,7 @@ Every plugin delivery must include:
 5. **Review & Installation Instructions:**
    - Navigate to **Plugins** → **Add plugin**.
    - Enter the source identifier under *Install a repository as-is*.
-   - Click **Review repository**, inspect the files and digest, check *Trust this repository*, and click **Install plugin**.
+   - Click **Review exact commit**, inspect the files and digest, check *I trust this exact commit and want to install its prebuilt files.*, and click **Trust and install** (or **Trust and upgrade**).
 6. **Restart Requirements:** Explicitly state: **"No Dashboard restart or rebuild required."**
 7. **Pi Access Grant Instructions:** Explain how to enable the plugin in the UI and how to grant Pi **Read** or **Write** access if agent tools/skills are included.
 8. **Tests Performed:** Summary of verified functionality and any untested boundaries.

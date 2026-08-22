@@ -42,6 +42,10 @@ export interface SubPiWorkerOptions {
   workspace: string
   sessionDir?: string
   pluginToolsExtension: string
+  pluginStateRoot?: string
+  pluginCodeRoot?: string
+  authoringSkillPath?: string
+  referenceSkillPath?: string
   git: GitService
   enabled: boolean
 }
@@ -65,7 +69,17 @@ export class SubPiWorkerAdapter implements WorkerAdapter {
   async run(input: WorkerRunInput, hooks: WorkerRunHooks): Promise<WorkerRunOutput> {
     if (this.active) throw new Error('Sub PI is already running')
     const args = ['--mode', 'rpc', '--name', `Sub PI: ${input.prompt.slice(0, 72)}`, '--tools', toolsFor(input.mode), '--extension', this.options.pluginToolsExtension, ...(this.options.sessionDir ? ['--session-dir', this.options.sessionDir] : [])]
-    const rpc = new PiRpcProcess({ cwd: this.options.workspace, args, env: { PI_DASHBOARD_WORKER_MODE: input.mode } })
+    const rpc = new PiRpcProcess({
+      cwd: this.options.workspace,
+      args,
+      env: {
+        PI_DASHBOARD_WORKER_MODE: input.mode,
+        ...(this.options.pluginStateRoot ? { PI_DASHBOARD_PLUGIN_STATE_ROOT: this.options.pluginStateRoot } : {}),
+        ...(this.options.pluginCodeRoot ? { PI_DASHBOARD_PLUGIN_CODE_ROOT: this.options.pluginCodeRoot } : {}),
+        ...(this.options.authoringSkillPath ? { PI_DASHBOARD_PLUGIN_AUTHORING_SKILL_PATH: this.options.authoringSkillPath } : {}),
+        ...(this.options.referenceSkillPath ? { PI_DASHBOARD_REFERENCE_SKILL_PATH: this.options.referenceSkillPath } : {}),
+      },
+    })
     const before = (await this.options.git.status()).entries
     const touched = new Set<string>()
     let result = ''

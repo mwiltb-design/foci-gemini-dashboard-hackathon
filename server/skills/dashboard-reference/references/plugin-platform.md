@@ -25,7 +25,7 @@ When installing or reviewing a repository plugin through **Plugins → Add plugi
    - Must be an initialized Git repository with committed files (`git init && git add -A && git commit`).
    - Strict path boundary containment is enforced (paths escaping with `..` are blocked).
 2. **Local Repository (`local:<plugin-id>`)**:
-   - Resolved against the user's local plugins directory (`~/.pi/agent/plugins/<plugin-id>`) or fallback bundled root.
+   - Resolved against the user's local plugins directory (`~/.pi-dashboard/plugins/<plugin-id>`) or fallback bundled root.
    - Must be a valid Git repository with committed files.
 3. **Public GitHub Repository (`https://github.com/<owner>/<repo>`)**:
    - Cloned on demand at a shallow depth for exact-commit review and SHA256 digest pinning.
@@ -92,6 +92,10 @@ Every Pi tool must declare:
 - A path beginning with `/agent/*`.
 - A valid JSON Schema object describing its parameters with `additionalProperties: false`.
 
+### Supported Permissions
+- `plugin-data:read` & `plugin-data:write`: Guard read and write operations in `context.storage`.
+- `dashboard-theme:read` & `dashboard-notifications:write`: Reserved and recognized tokens in the manifest schema for future host capabilities.
+
 ## Browser Sandbox & Security Rules
 
 Plugin iframes run with strict sandbox protection:
@@ -113,6 +117,6 @@ If plugin interactions fail with sandbox or iframe errors, inspect `server/src/p
 
 ## Verification & Acceptance
 
-1. Verify TypeScript types and build: `npm run build` from the workspace root.
+1. Verify TypeScript types and build: `npm run build` from the Dashboard source repository root.
 2. Test installation, upgrade, rollback, and removal through the Dashboard Plugins UI.
 3. Verify tool availability and access restrictions with Pi chat when read/write grants are toggled.

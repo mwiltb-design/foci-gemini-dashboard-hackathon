@@ -107,7 +107,17 @@ const workerInternalToken = randomBytes(32).toString('base64url')
 const profile = dashboardProfile()
 const enabledFeatures = new Set<DashboardFeature>(profile.features)
 let rpcArgs = ['--mode', 'rpc', '--continue', '--name', 'Pi Dashboard', '--extension', runtimeInfoExtension, '--extension', curatedMemoryExtension, '--extension', memoryCheckpointExtension, '--extension', pluginToolsExtension, ...(enabledFeatures.has('workers') ? ['--extension', workersExtension] : []), ...(rpcSessionDir ? ['--session-dir', rpcSessionDir] : [])]
-let rpc = registerRpcListeners(new PiRpcProcess({ cwd: workspace, args: rpcArgs, env: { PI_DASHBOARD_WORKER_INTERNAL_TOKEN: workerInternalToken } }))
+let rpc = registerRpcListeners(new PiRpcProcess({
+  cwd: workspace,
+  args: rpcArgs,
+  env: {
+    PI_DASHBOARD_WORKER_INTERNAL_TOKEN: workerInternalToken,
+    PI_DASHBOARD_PLUGIN_STATE_ROOT: pluginStateRoot,
+    PI_DASHBOARD_PLUGIN_CODE_ROOT: pluginCodeRoot,
+    PI_DASHBOARD_PLUGIN_AUTHORING_SKILL_PATH: dashboardPluginAuthoringSkill,
+    PI_DASHBOARD_REFERENCE_SKILL_PATH: dashboardReferenceSkill,
+  },
+}))
 let sessions = new SessionCatalog(sessionRoot, workspace)
 let sessionArchive = new SessionArchiveService(sessionArchivePath)
 let files = new FileService(workspace)
@@ -125,7 +135,17 @@ const workerBounds = {
   timeoutMs: positiveLimit(process.env.PI_DASHBOARD_WORKER_TIMEOUT_MS, 10 * 60_000, 60_000),
   resultLimitBytes: positiveLimit(process.env.PI_DASHBOARD_WORKER_RESULT_LIMIT_BYTES, 12 * 1024, 1024),
 }
-let subPi = new SubPiWorkerAdapter({ workspace, sessionDir: rpcSessionDir, pluginToolsExtension, git, enabled: enabledFeatures.has('workers') })
+let subPi = new SubPiWorkerAdapter({
+  workspace,
+  sessionDir: rpcSessionDir,
+  pluginToolsExtension,
+  pluginStateRoot,
+  pluginCodeRoot,
+  authoringSkillPath: dashboardPluginAuthoringSkill,
+  referenceSkillPath: dashboardReferenceSkill,
+  git,
+  enabled: enabledFeatures.has('workers'),
+})
 let workers = new WorkerCoordinator({
   storePath: workerStorePath,
   adapter: subPi,
@@ -280,7 +300,17 @@ async function switchActiveWorkspace(targetWorkspace: string): Promise<{ workspa
   onboarding = new OnboardingService(workspace, agentDir, defaultDashboardDataDir)
   plugins = new PluginService({ bundledRoot: pluginCodeRoot, stateRoot: pluginStateRoot, workspaceRoot: workspace, runtimeSocketRoot: pluginRuntimeSocketRoot, assetCapability: pluginAssetCapability, localRepositoryRoot: pluginLocalRepositoryRoot })
   activity = new ActivityStore(activityPath)
-  subPi = new SubPiWorkerAdapter({ workspace, sessionDir: currentRpcSessionDir, pluginToolsExtension, git, enabled: enabledFeatures.has('workers') })
+  subPi = new SubPiWorkerAdapter({
+    workspace,
+    sessionDir: currentRpcSessionDir,
+    pluginToolsExtension,
+    pluginStateRoot,
+    pluginCodeRoot,
+    authoringSkillPath: dashboardPluginAuthoringSkill,
+    referenceSkillPath: dashboardReferenceSkill,
+    git,
+    enabled: enabledFeatures.has('workers'),
+  })
   workers = new WorkerCoordinator({
     storePath: workerStorePath,
     adapter: subPi,
@@ -296,7 +326,17 @@ async function switchActiveWorkspace(targetWorkspace: string): Promise<{ workspa
   })
 
   rpcArgs = ['--mode', 'rpc', '--continue', '--name', 'Pi Dashboard', '--extension', runtimeInfoExtension, '--extension', curatedMemoryExtension, '--extension', memoryCheckpointExtension, '--extension', pluginToolsExtension, ...(enabledFeatures.has('workers') ? ['--extension', workersExtension] : []), '--session-dir', currentRpcSessionDir]
-  rpc = registerRpcListeners(new PiRpcProcess({ cwd: workspace, args: rpcArgs, env: { PI_DASHBOARD_WORKER_INTERNAL_TOKEN: workerInternalToken } }))
+  rpc = registerRpcListeners(new PiRpcProcess({
+    cwd: workspace,
+    args: rpcArgs,
+    env: {
+      PI_DASHBOARD_WORKER_INTERNAL_TOKEN: workerInternalToken,
+      PI_DASHBOARD_PLUGIN_STATE_ROOT: pluginStateRoot,
+      PI_DASHBOARD_PLUGIN_CODE_ROOT: pluginCodeRoot,
+      PI_DASHBOARD_PLUGIN_AUTHORING_SKILL_PATH: dashboardPluginAuthoringSkill,
+      PI_DASHBOARD_REFERENCE_SKILL_PATH: dashboardReferenceSkill,
+    },
+  }))
 
   await Promise.all([
     activity.initialize(),

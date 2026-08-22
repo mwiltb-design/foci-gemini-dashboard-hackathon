@@ -11,7 +11,7 @@ import {
 import { PluginHost } from '../src/plugin-host.js'
 
 const bundledRoot = process.env.PI_DASHBOARD_PLUGIN_CODE_ROOT ?? resolve(process.cwd(), '../plugins')
-const stateRoot = process.env.PI_DASHBOARD_PLUGIN_STATE_ROOT ?? resolve(homedir(), '.pi/agent/dashboard/plugins')
+const stateRoot = process.env.PI_DASHBOARD_PLUGIN_STATE_ROOT ?? resolve(homedir(), '.pi-dashboard/plugin-data')
 const authoringSkillPath = process.env.PI_DASHBOARD_PLUGIN_AUTHORING_SKILL_PATH ?? join(process.cwd(), 'skills/dashboard-plugin-authoring')
 const referenceSkillPath = process.env.PI_DASHBOARD_REFERENCE_SKILL_PATH ?? join(process.cwd(), 'skills/dashboard-reference')
 const workerReadOnly = process.env.PI_DASHBOARD_WORKER_MODE === 'research' || process.env.PI_DASHBOARD_WORKER_MODE === 'review'
