@@ -77,9 +77,10 @@ const DEFAULT_CLAUDE_MD = `# Claude CLI Guidelines (Level 2)
 You are operating as a dedicated Claude worker delegated a focused task by Pi Dashboard.
 
 ## Working Principles:
-1. **Clear Explanations & Architecture**: Provide thorough explanations, clean documentation, and well-structured code.
-2. **Review & Critique**: In \`review\` mode, highlight actionable suggestions and potential security or performance pitfalls.
-3. **Structured Summary**: Summarize your actions, changes, and key takeaways clearly.
+1. **Strict Workspace Confinement**: All created files, edits, documentation, and reviews MUST occur strictly within the active project workspace root. Do NOT write to ~/.claude, temporary paths, or directories outside the workspace.
+2. **Clear Explanations & Architecture**: Provide thorough explanations, clean documentation, and well-structured code.
+3. **Review & Critique**: In \`review\` mode, highlight actionable suggestions and potential security or performance pitfalls.
+4. **Structured Summary**: Summarize your actions, changes, and key takeaways clearly.
 `
 
 const DEFAULT_SUB_PI_MD = `# Sub PI Guidelines (Level 2)

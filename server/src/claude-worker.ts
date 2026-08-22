@@ -25,16 +25,30 @@ function changedFiles(before: GitStatusEntry[], after: GitStatusEntry[]): Worker
     .sort((left, right) => left.path.localeCompare(right.path))
 }
 
-function claudePrompt(input: WorkerRunInput): string {
+function claudePrompt(input: WorkerRunInput, workspace: string): string {
   const role = input.mode === 'implement'
-    ? 'You may inspect and edit files in the current workspace. Implement the requested changes and verify correctness.'
+    ? 'You may inspect and edit files inside the current workspace. Implement the requested changes and verify correctness.'
     : input.mode === 'review'
       ? 'Review the project read-only. Provide detailed critique, risk assessment, and recommendations.'
       : 'Research the project read-only and report structured, evidence-based findings.'
 
   const rules = input.ruleContext ? `\n\nGuidelines:\n${input.ruleContext}\n` : ''
 
-  return `You are a bounded Claude CLI worker reporting back to Pi Dashboard.\n\nMode: ${input.mode}\n${role}${rules}\nWork only inside the current project. Return a concise, structured summary of your findings and actions.\n\nTask:\n${input.prompt}`
+  return `You are a bounded Claude CLI worker reporting back to Pi Dashboard.
+
+Active Project Workspace: ${workspace}
+CRITICAL WORKSPACE CONFINEMENT:
+- All inspected, created, or modified files MUST be located strictly inside the active project workspace root ("${workspace}").
+- Do NOT write to ~/.claude, temporary paths, or directories outside the workspace.
+- Write code, documentation, and edits directly inside the project directory.
+
+Mode: ${input.mode}
+${role}${rules}
+
+Task:
+${input.prompt}
+
+Return a concise, structured summary of your findings and actions inside "${workspace}".`
 }
 
 function cleanEnvironment(): NodeJS.ProcessEnv {
@@ -81,7 +95,7 @@ export class ClaudeWorkerAdapter implements WorkerAdapter {
     const before = (await this.options.git.status()).entries
     const command = resolveExecutable('claude')
     const args = [
-      '-p', claudePrompt(input),
+      '-p', claudePrompt(input, this.options.workspace),
       '--output-format', 'text',
     ]
 
