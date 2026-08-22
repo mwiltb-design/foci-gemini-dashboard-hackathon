@@ -27,6 +27,11 @@ import { SkillError, SkillService } from './skill-service.js'
 import { SystemError, SystemService, THINKING_LEVELS } from './system-service.js'
 import { ToolService } from './tool-service.js'
 import { SubPiWorkerAdapter } from './sub-pi-worker.js'
+import { AntigravityWorkerAdapter } from './antigravity-worker.js'
+import { CodexWorkerAdapter } from './codex-worker.js'
+import { ClaudeWorkerAdapter } from './claude-worker.js'
+import { WorkerRulesService } from './worker-rules.js'
+import { WorkerConsoleSession } from './worker-console-session.js'
 import { WorkerCoordinator, WorkerError } from './worker-coordinator.js'
 import { ProjectService } from './project-service.js'
 import { ShortcutService } from './shortcut-service.js'
@@ -130,6 +135,8 @@ const tools = new ToolService(runtimeInfoPath)
 let plugins = new PluginService({ bundledRoot: pluginCodeRoot, stateRoot: pluginStateRoot, workspaceRoot: workspace, runtimeSocketRoot: pluginRuntimeSocketRoot, assetCapability: pluginAssetCapability, localRepositoryRoot: pluginLocalRepositoryRoot })
 let activity = new ActivityStore(activityPath)
 const providerLogin = new ProviderLoginSession()
+const workerConsoleSession = new WorkerConsoleSession()
+const workerRules = new WorkerRulesService()
 const workerBounds = {
   turnLimit: positiveLimit(process.env.PI_DASHBOARD_WORKER_TURN_LIMIT, 8, 1),
   timeoutMs: positiveLimit(process.env.PI_DASHBOARD_WORKER_TIMEOUT_MS, 10 * 60_000, 60_000),
@@ -146,9 +153,25 @@ let subPi = new SubPiWorkerAdapter({
   git,
   enabled: enabledFeatures.has('workers'),
 })
+let antigravityWorker = new AntigravityWorkerAdapter({
+  workspace,
+  git,
+  enabled: enabledFeatures.has('workers'),
+})
+let codexWorker = new CodexWorkerAdapter({
+  workspace,
+  git,
+  enabled: enabledFeatures.has('workers'),
+})
+let claudeWorker = new ClaudeWorkerAdapter({
+  workspace,
+  git,
+  enabled: enabledFeatures.has('workers'),
+})
 let workers = new WorkerCoordinator({
   storePath: workerStorePath,
-  adapter: subPi,
+  adapters: [subPi, antigravityWorker, codexWorker, claudeWorker],
+  rulesService: workerRules,
   bounds: workerBounds,
   primaryDefaults: async () => {
     const snapshot = await state()
@@ -311,9 +334,25 @@ async function switchActiveWorkspace(targetWorkspace: string): Promise<{ workspa
     git,
     enabled: enabledFeatures.has('workers'),
   })
+  antigravityWorker = new AntigravityWorkerAdapter({
+    workspace,
+    git,
+    enabled: enabledFeatures.has('workers'),
+  })
+  codexWorker = new CodexWorkerAdapter({
+    workspace,
+    git,
+    enabled: enabledFeatures.has('workers'),
+  })
+  claudeWorker = new ClaudeWorkerAdapter({
+    workspace,
+    git,
+    enabled: enabledFeatures.has('workers'),
+  })
   workers = new WorkerCoordinator({
     storePath: workerStorePath,
-    adapter: subPi,
+    adapters: [subPi, antigravityWorker, codexWorker, claudeWorker],
+    rulesService: workerRules,
     bounds: workerBounds,
     primaryDefaults: async () => {
       const snapshot = await state()
@@ -645,9 +684,10 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
     if (request.method === 'POST' && url.pathname === '/internal/workers/tasks') {
       const body = await readJsonBody(request)
       json(response, 202, await workers.start({
-        providerId: 'sub-pi',
+        providerId: typeof body.providerId === 'string' ? body.providerId : 'sub-pi',
         mode: typeof body.mode === 'string' ? body.mode : undefined,
         prompt: typeof body.prompt === 'string' ? body.prompt : undefined,
+        bounds: body.bounds && typeof body.bounds === 'object' ? body.bounds as any : undefined,
       }))
       return
     }
@@ -984,6 +1024,7 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
       providerId: typeof body.providerId === 'string' ? body.providerId : undefined,
       mode: typeof body.mode === 'string' ? body.mode : undefined,
       prompt: typeof body.prompt === 'string' ? body.prompt : undefined,
+      bounds: body.bounds && typeof body.bounds === 'object' ? body.bounds as any : undefined,
       model: body.model && typeof body.model === 'object' && typeof (body.model as any).provider === 'string' && typeof (body.model as any).id === 'string'
         ? { provider: String((body.model as any).provider), id: String((body.model as any).id) }
         : undefined,
@@ -991,6 +1032,22 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
     })
     record({ category: 'system', type: 'worker_task_started', severity: 'info', summary: `Started ${task.mode} task with ${task.providerName}`, sessionId: currentSessionId, data: { taskId: task.id, providerId: task.providerId, mode: task.mode } })
     json(response, 202, task)
+    return
+  }
+  if (request.method === 'POST' && url.pathname === '/api/workers/config') {
+    const body = await readJsonBody(request)
+    await workerRules.updateConfig(body)
+    record({ category: 'system', type: 'worker_config_updated', severity: 'info', summary: 'Updated global worker configuration', sessionId: currentSessionId })
+    json(response, 200, await workers.snapshot())
+    return
+  }
+  const workerRulePostMatch = url.pathname.match(/^\/api\/workers\/rules\/([^/]+)$/)
+  if (request.method === 'POST' && workerRulePostMatch) {
+    const ruleId = decodeURIComponent(workerRulePostMatch[1])
+    const body = await readJsonBody(request)
+    const saved = await workerRules.saveRule(ruleId, String(body.content ?? ''))
+    record({ category: 'system', type: 'worker_rule_saved', severity: 'info', summary: `Updated worker rule "${saved.title}"`, sessionId: currentSessionId })
+    json(response, 200, saved)
     return
   }
   const workerCancelMatch = url.pathname.match(/^\/api\/workers\/tasks\/([^/]+)\/cancel$/)
@@ -1182,7 +1239,18 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
     return
   }
   if (url.pathname === '/api/workers') {
-    json(response, 200, workers.snapshot())
+    json(response, 200, await workers.snapshot())
+    return
+  }
+  if (url.pathname === '/api/workers/rules') {
+    json(response, 200, { rules: await workerRules.listRules() })
+    return
+  }
+  const workerRuleGetMatch = url.pathname.match(/^\/api\/workers\/rules\/([^/]+)$/)
+  if (workerRuleGetMatch) {
+    const ruleId = decodeURIComponent(workerRuleGetMatch[1])
+    const rule = await workerRules.getRule(ruleId)
+    json(response, rule ? 200 : 404, rule ?? { error: 'Worker rule not found' })
     return
   }
   const workerTaskMatch = url.pathname.match(/^\/api\/workers\/tasks\/([^/]+)$/)
@@ -1297,18 +1365,39 @@ const server = createServer((request, response) => {
 const webSocketServer = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 })
 const terminalWebSocketServer = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 })
 const providerLoginWebSocketServer = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 })
+const workerConsoleWebSocketServer = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 })
 
 server.on('upgrade', (request, socket, head) => {
   const origin = request.headers.origin
   const path = new URL(request.url ?? '/', 'http://localhost').pathname
-  const allowedPath = path === '/ws' || path === '/ws/provider-login' || (path === '/ws/terminal' && enabledFeatures.has('terminal'))
+  const workerConsoleMatch = path.match(/^\/ws\/workers\/([^/]+)\/(login|manage)$/)
+  const allowedPath = path === '/ws' || path === '/ws/provider-login' || (path === '/ws/terminal' && enabledFeatures.has('terminal')) || (Boolean(workerConsoleMatch) && enabledFeatures.has('workers'))
   if (!allowedPath || !auth.originAllowed(request, allowedOrigins) || (auth.enabled && !auth.authenticate(request))) {
     socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n')
     socket.destroy()
     return
   }
-  const target = path === '/ws/terminal' ? terminalWebSocketServer : path === '/ws/provider-login' ? providerLoginWebSocketServer : webSocketServer
+  const target = Boolean(workerConsoleMatch)
+    ? workerConsoleWebSocketServer
+    : path === '/ws/terminal'
+      ? terminalWebSocketServer
+      : path === '/ws/provider-login'
+        ? providerLoginWebSocketServer
+        : webSocketServer
   target.handleUpgrade(request, socket, head, (client) => target.emit('connection', client, request))
+})
+
+workerConsoleWebSocketServer.on('connection', (browser, request: IncomingMessage) => {
+  const url = new URL(request.url ?? '/', 'http://localhost')
+  const match = url.pathname.match(/^\/ws\/workers\/([^/]+)\/(login|manage)$/)
+  if (!match) {
+    browser.close(1008, 'Invalid worker console path')
+    return
+  }
+  const providerId = decodeURIComponent(match[1])
+  const mode = match[2] as 'login' | 'manage'
+  record({ category: 'system', type: 'worker_console_opened', severity: 'info', summary: `Opened ${providerId} console (${mode})` })
+  workerConsoleSession.attach(browser, providerId, mode, workspace)
 })
 
 providerLoginWebSocketServer.on('connection', (browser) => {

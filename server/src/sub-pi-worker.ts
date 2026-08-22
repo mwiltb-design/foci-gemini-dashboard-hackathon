@@ -1,7 +1,7 @@
 import type { RpcEvent } from './types.js'
 import { PiRpcProcess } from './pi-rpc.js'
 import type { GitService, GitStatusEntry } from './git-service.js'
-import type { WorkerAdapter, WorkerChangedFile, WorkerMode, WorkerRunHooks, WorkerRunInput, WorkerRunOutput } from './worker-types.js'
+import type { WorkerAdapter, WorkerChangedFile, WorkerMode, WorkerProviderStatus, WorkerRunHooks, WorkerRunInput, WorkerRunOutput } from './worker-types.js'
 
 function toolsFor(mode: WorkerMode): string {
   return mode === 'implement' ? 'read,grep,find,ls,bash,edit,write' : 'read,grep,find,ls'
@@ -35,7 +35,10 @@ function workerPrompt(input: WorkerRunInput): string {
     : input.mode === 'review'
       ? 'Read and review only. Do not edit files or run commands that change project or external state.'
       : 'Research inside the available project/runtime context only. Read only; do not edit files or run commands that change state.'
-  return `You are Sub PI, a bounded worker reporting to Primary PI.\n\nMode: ${input.mode}\n${policy}\nWork only on the narrow task below. Keep the final response concise and decision-useful. Include findings, validation performed, and changed files (if any). Primary PI will review your work and remains responsible for all final decisions.\n\nTask:\n${input.prompt}\n\nBounds: at most ${input.bounds.turnLimit} model turns and ${Math.round(input.bounds.timeoutMs / 60_000)} minutes.`
+
+  const rules = input.ruleContext ? `\n\nGuidelines:\n${input.ruleContext}\n` : ''
+
+  return `You are Sub PI, a bounded worker reporting to Primary PI.\n\nMode: ${input.mode}\n${policy}${rules}\nWork only on the narrow task below. Keep the final response concise and decision-useful. Include findings, validation performed, and changed files (if any). Primary PI will review your work and remains responsible for all final decisions.\n\nTask:\n${input.prompt}\n\nBounds: at most ${input.bounds.turnLimit} model turns and ${Math.round(input.bounds.timeoutMs / 60_000)} minutes.`
 }
 
 export interface SubPiWorkerOptions {
@@ -51,18 +54,22 @@ export interface SubPiWorkerOptions {
 }
 
 export class SubPiWorkerAdapter implements WorkerAdapter {
-  readonly provider
   private active?: { taskId: string; rpc: PiRpcProcess; cancel: () => void }
 
-  constructor(private readonly options: SubPiWorkerOptions) {
-    this.provider = {
+  constructor(private readonly options: SubPiWorkerOptions) {}
+
+  get provider(): WorkerProviderStatus {
+    return {
       id: 'sub-pi',
       name: 'Sub PI',
       description: 'Built-in focused worker using a separate Pi RPC process and saved session.',
-      kind: 'built-in' as const,
-      status: options.enabled ? 'ready' as const : 'disabled' as const,
-      statusLabel: options.enabled ? 'Ready in this Dashboard profile' : 'Enable Workers in the Dashboard profile',
+      kind: 'built-in',
+      status: this.options.enabled ? 'ready' : 'disabled',
+      statusLabel: this.options.enabled ? 'Ready in this Dashboard profile' : 'Enable Workers in the Dashboard profile',
       modes: ['research', 'review', 'implement'] as WorkerMode[],
+      enabled: this.options.enabled,
+      loginCommand: 'exec pi',
+      manageCommand: 'exec pi',
     }
   }
 
@@ -128,7 +135,19 @@ export class SubPiWorkerAdapter implements WorkerAdapter {
       await settled
       const bounded = boundedText(result || 'Sub PI finished without a text result. Inspect the saved session for details.', input.bounds.resultLimitBytes)
       const after = (await this.options.git.status()).entries
-      return { result: bounded.text, resultTruncated: bounded.truncated, changedFiles: changedFiles(before, after, touched) }
+      const files = changedFiles(before, after, touched)
+      return {
+        result: bounded.text,
+        resultTruncated: bounded.truncated,
+        changedFiles: files,
+        resultEnvelope: {
+          summary: bounded.text.slice(0, 300),
+          actionsTaken: files.length ? [`Modified ${files.length} file(s)`] : ['Completed task execution'],
+          changedFiles: files,
+          warnings: [],
+          sessionId,
+        },
+      }
     } finally {
       rpc.off('event', eventHandler)
       await rpc.stop().catch(() => undefined)

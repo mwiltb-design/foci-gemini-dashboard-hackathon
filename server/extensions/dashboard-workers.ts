@@ -47,21 +47,49 @@ export default function dashboardWorkers(pi: ExtensionAPI) {
   if (!token) return
   pi.registerTool({
     name: 'dashboard_delegate_worker',
-    label: 'Delegate to Sub PI',
-    description: 'Send one narrow bounded task to the built-in Sub PI worker. Returns only its concise result and saved-session reference; Primary PI must review all findings and changes.',
-    promptSnippet: 'Delegate a narrow research, review, or implementation task to Sub PI when parallel context would help',
+    label: 'Delegate to Worker',
+    description: 'Send one bounded task to an enabled worker provider (Sub PI, Antigravity CLI, Codex CLI, Claude CLI). Consult WORKERS.md rules for provider specialization. Returns a concise result envelope; Primary PI must review all findings and changes.',
+    promptSnippet: 'Delegate a narrow research, review, or implementation task to a specialized worker CLI',
     promptGuidelines: [
-      'Use Sub PI only for a narrow, bounded task with a concrete deliverable.',
-      'Review Sub PI results and project changes yourself before presenting them as accepted.',
-      'Do not delegate work that requires user approval, credentials, unrelated session control, or further worker delegation.',
+      'Consult WORKERS.md routing rules when choosing which provider to delegate to (e.g. antigravity-cli for science/deep reasoning, codex-cli for fast code/tests, claude-cli for docs/critique, sub-pi for native Pi tasks).',
+      'Use workers for narrow, bounded tasks with concrete deliverables.',
+      'Review worker results and project changes yourself before presenting them as accepted.',
+      'Do not delegate work that requires interactive user approval, credentials, or recursive worker delegation.',
     ],
     parameters: Type.Object({
-      mode: Type.Union([Type.Literal('research'), Type.Literal('review'), Type.Literal('implement')], { description: 'Read-only research, read-only review, or project-writing implementation.' }),
-      prompt: Type.String({ minLength: 1, maxLength: 12000, description: 'The complete bounded task and expected concise deliverable.' }),
+      providerId: Type.Optional(Type.Union([
+        Type.Literal('sub-pi'),
+        Type.Literal('antigravity-cli'),
+        Type.Literal('codex-cli'),
+        Type.Literal('claude-cli'),
+      ], { description: 'Target worker provider. Defaults to sub-pi if omitted.' })),
+      mode: Type.Union([
+        Type.Literal('research'),
+        Type.Literal('review'),
+        Type.Literal('implement'),
+      ], { description: 'Read-only research, read-only review, or project-writing implementation.' }),
+      prompt: Type.String({ minLength: 1, maxLength: 12000, description: 'The complete bounded task and expected deliverable.' }),
+      bounds: Type.Optional(Type.Object({
+        turnLimit: Type.Optional(Type.Number({ minimum: 1, maximum: 30, description: 'Maximum turns (1-30)' })),
+        timeoutMinutes: Type.Optional(Type.Number({ minimum: 1, maximum: 30, description: 'Maximum minutes (1-30)' })),
+        resultLimitKb: Type.Optional(Type.Number({ minimum: 1, maximum: 64, description: 'Maximum result size in KB (1-64)' })),
+      }, { description: 'Optional execution bounds override' })),
     }),
     async execute(_toolCallId, parameters) {
       try {
-        const created = await request('POST', '/internal/workers/tasks', parameters)
+        const payload = {
+          providerId: parameters.providerId,
+          mode: parameters.mode,
+          prompt: parameters.prompt,
+          ...(parameters.bounds ? {
+            bounds: {
+              ...(parameters.bounds.turnLimit ? { turnLimit: parameters.bounds.turnLimit } : {}),
+              ...(parameters.bounds.timeoutMinutes ? { timeoutMs: parameters.bounds.timeoutMinutes * 60_000 } : {}),
+              ...(parameters.bounds.resultLimitKb ? { resultLimitBytes: parameters.bounds.resultLimitKb * 1024 } : {}),
+            },
+          } : {}),
+        }
+        const created = await request('POST', '/internal/workers/tasks', payload)
         const id = String(created.id ?? '')
         if (!id) throw new Error('Dashboard did not return a worker task ID')
         let task = created

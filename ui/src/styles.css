@@ -1239,6 +1239,16 @@ button:disabled { cursor: not-allowed; opacity: .58; }
   .mobile-nav__badge { position: absolute; min-width: 17px; padding: 2px 4px; color: #241609; background: var(--yellow); border-radius: 99px; font-size: 10px; }
 }
 
+.worker-console { overflow: hidden; background: #141a21; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 16px; }
+.worker-console > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 11px 12px; border-bottom: 1px solid var(--line); }
+.worker-console h2 { margin: 2px 0 0; font-size: 14px; }
+.worker-console header p { margin: 4px 0 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.worker-console__terminal { height: 300px; padding: 7px 4px 4px 7px; overflow: hidden; background: #07100d; }
+.worker-console__links { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 11px; border-top: 1px solid var(--line); font-size: 10px; }
+.worker-console__links a { color: var(--accent); }
+.worker-console > footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 11px; border-top: 1px solid var(--line); }
+.worker-console > footer span { color: var(--muted); font-size: 10px; line-height: 1.4; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }

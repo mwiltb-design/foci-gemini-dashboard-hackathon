@@ -15,6 +15,15 @@ export interface WorkerChangedFile {
   state: string
 }
 
+export interface WorkerResultEnvelope {
+  summary: string
+  actionsTaken: string[]
+  changedFiles: WorkerChangedFile[]
+  warnings: string[]
+  artifactLinks?: string[]
+  sessionId?: string
+}
+
 export interface WorkerTask {
   id: string
   providerId: string
@@ -36,6 +45,7 @@ export interface WorkerTask {
   model?: { provider: string; id: string }
   thinkingLevel?: string
   changedFiles: WorkerChangedFile[]
+  resultEnvelope?: WorkerResultEnvelope
 }
 
 export interface WorkerProviderStatus {
@@ -46,15 +56,40 @@ export interface WorkerProviderStatus {
   status: 'ready' | 'disabled' | 'unavailable' | 'planned'
   statusLabel: string
   modes: WorkerMode[]
+  enabled: boolean
+  loginCommand?: string
+  manageCommand?: string
+}
+
+export interface WorkerConfiguration {
+  schemaVersion: 1
+  providersEnabled: Record<string, boolean>
+  defaultBounds: WorkerBounds
+  subPi?: {
+    model?: { provider: string; id: string }
+    thinkingLevel?: string
+  }
+}
+
+export interface WorkerRuleFile {
+  id: string
+  title: string
+  fileName: string
+  level: 1 | 2
+  providerId?: string
+  content: string
+  updatedAt: string
 }
 
 export interface WorkerRunInput {
   taskId: string
+  providerId: string
   mode: WorkerMode
   prompt: string
   bounds: WorkerBounds
   model?: { provider: string; id: string }
   thinkingLevel?: string
+  ruleContext?: string
 }
 
 export interface WorkerRunHooks {
@@ -66,6 +101,7 @@ export interface WorkerRunOutput {
   result: string
   resultTruncated: boolean
   changedFiles: WorkerChangedFile[]
+  resultEnvelope?: WorkerResultEnvelope
 }
 
 export interface WorkerAdapter {

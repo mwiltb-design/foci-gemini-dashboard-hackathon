@@ -1,8 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
+﻿import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../api'
 
 export type WorkerMode = 'research' | 'review' | 'implement'
 export type WorkerStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timed-out'
+
+export interface WorkerBounds {
+  timeoutMs: number
+  turnLimit: number
+  resultLimitBytes: number
+}
 
 export interface WorkerProvider {
   id: string
@@ -12,6 +18,18 @@ export interface WorkerProvider {
   status: 'ready' | 'disabled' | 'unavailable' | 'planned'
   statusLabel: string
   modes: WorkerMode[]
+  enabled: boolean
+  loginCommand?: string
+  manageCommand?: string
+}
+
+export interface WorkerResultEnvelope {
+  summary: string
+  actionsTaken: string[]
+  changedFiles: Array<{ path: string; state: string }>
+  warnings: string[]
+  artifactLinks?: string[]
+  sessionId?: string
 }
 
 export interface WorkerTask {
@@ -23,7 +41,7 @@ export interface WorkerTask {
   status: WorkerStatus
   progress: string
   turns: number
-  bounds: { timeoutMs: number; turnLimit: number; resultLimitBytes: number }
+  bounds: WorkerBounds
   createdAt: string
   updatedAt: string
   startedAt?: string
@@ -32,20 +50,45 @@ export interface WorkerTask {
   result?: string
   resultTruncated?: boolean
   error?: string
+  model?: { provider: string; id: string }
+  thinkingLevel?: string
   changedFiles: Array<{ path: string; state: string }>
+  resultEnvelope?: WorkerResultEnvelope
 }
 
-interface WorkerSnapshot {
+export interface WorkerConfiguration {
+  schemaVersion: 1
+  providersEnabled: Record<string, boolean>
+  defaultBounds: WorkerBounds
+  subPi?: {
+    model?: { provider: string; id: string }
+    thinkingLevel?: string
+  }
+}
+
+export interface WorkerRuleFile {
+  id: string
+  title: string
+  fileName: string
+  level: 1 | 2
+  providerId?: string
+  content: string
+  updatedAt: string
+}
+
+export interface WorkerSnapshot {
   providers: WorkerProvider[]
   activeTaskId?: string
   tasks: WorkerTask[]
+  configuration: WorkerConfiguration
+  rules: WorkerRuleFile[]
 }
 
-async function request(url: string, init?: RequestInit): Promise<WorkerSnapshot | WorkerTask> {
+async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await apiFetch(url, init)
-  const body = await response.json() as (WorkerSnapshot | WorkerTask) & { error?: string }
+  const body = await response.json() as T & { error?: string }
   if (!response.ok) throw new Error(body.error ?? `Worker request failed (${response.status})`)
-  return body
+  return body as T
 }
 
 export function useWorkers() {
@@ -60,11 +103,10 @@ export function useWorkers() {
 
   useEffect(() => {
     const controller = new AbortController()
-    request('/api/workers', { signal: controller.signal })
+    request<WorkerSnapshot>('/api/workers', { signal: controller.signal })
       .then((data) => {
-        const next = data as WorkerSnapshot
-        setSnapshot(next)
-        setSelectedId((current) => current && next.tasks.some((task) => task.id === current) ? current : next.activeTaskId ?? next.tasks[0]?.id)
+        setSnapshot(data)
+        setSelectedId((current) => current && data.tasks.some((task) => task.id === current) ? current : data.activeTaskId ?? data.tasks[0]?.id)
         setError('')
       })
       .catch((reason: unknown) => {
@@ -80,26 +122,27 @@ export function useWorkers() {
     return () => window.clearInterval(timer)
   }, [snapshot?.activeTaskId, refresh])
 
-  async function start(mode: WorkerMode, prompt: string, model?: { provider: string; id: string }, thinkingLevel?: string): Promise<boolean> {
+  async function start(input: {
+    providerId: string
+    mode: WorkerMode
+    prompt: string
+    bounds?: Partial<WorkerBounds>
+    model?: { provider: string; id: string }
+    thinkingLevel?: string
+  }): Promise<boolean> {
     setBusy(true)
     try {
-      const task = await request('/api/workers/tasks', {
+      const task = await request<WorkerTask>('/api/workers/tasks', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          providerId: 'sub-pi',
-          mode,
-          prompt,
-          ...(model ? { model } : {}),
-          ...(thinkingLevel ? { thinkingLevel } : {}),
-        }),
-      }) as WorkerTask
+        body: JSON.stringify(input),
+      })
       setSelectedId(task.id)
       setError('')
       refresh()
       return true
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to start Sub PI')
+      setError(reason instanceof Error ? reason.message : 'Unable to start worker')
       return false
     } finally {
       setBusy(false)
@@ -113,7 +156,45 @@ export function useWorkers() {
       setError('')
       refresh()
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to cancel Sub PI')
+      setError(reason instanceof Error ? reason.message : 'Unable to cancel worker')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function updateConfig(updates: Partial<WorkerConfiguration>): Promise<boolean> {
+    setBusy(true)
+    try {
+      const next = await request<WorkerSnapshot>('/api/workers/config', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(updates),
+      })
+      setSnapshot(next)
+      setError('')
+      return true
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to update worker configuration')
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function saveRule(ruleId: string, content: string): Promise<boolean> {
+    setBusy(true)
+    try {
+      await request<WorkerRuleFile>(`/api/workers/rules/${encodeURIComponent(ruleId)}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ content }),
+      })
+      setError('')
+      refresh()
+      return true
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to save worker rule')
+      return false
     } finally {
       setBusy(false)
     }
@@ -129,6 +210,8 @@ export function useWorkers() {
     error,
     start,
     cancel,
+    updateConfig,
+    saveRule,
     refresh,
   }
 }
