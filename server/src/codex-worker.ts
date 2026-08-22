@@ -26,16 +26,30 @@ function changedFiles(before: GitStatusEntry[], after: GitStatusEntry[]): Worker
     .sort((left, right) => left.path.localeCompare(right.path))
 }
 
-function codexPrompt(input: WorkerRunInput): string {
+function codexPrompt(input: WorkerRunInput, workspace: string): string {
   const policy = input.mode === 'implement'
-    ? 'You may edit files in the current project and run focused validation. Do not commit, push, access credentials, or change external systems.'
+    ? 'You may edit files inside the current project workspace and run focused validation. Do not commit, push, access credentials, or change external systems.'
     : input.mode === 'review'
       ? 'Review only. Do not edit files or run commands that change project or external state.'
       : 'Research this project only. Stay read-only and do not change project or external state.'
 
   const rules = input.ruleContext ? `\n\nGuidelines:\n${input.ruleContext}\n` : ''
 
-  return `You are a bounded Codex worker reporting back to Pi Dashboard.\n\nMode: ${input.mode}\n${policy}${rules}\nWork only on the task below. Return a concise result with findings, validation, and changed files if any.\n\nTask:\n${input.prompt}`
+  return `You are a bounded Codex worker reporting back to Pi Dashboard.
+
+Active Project Workspace: ${workspace}
+CRITICAL WORKSPACE CONFINEMENT:
+- All inspected, created, or modified files MUST be located strictly inside the active project workspace root ("${workspace}").
+- Do NOT write to ~/.codex, temporary paths, or directories outside "${workspace}".
+- Write code and test files directly inside the project directory.
+
+Mode: ${input.mode}
+${policy}${rules}
+
+Task:
+${input.prompt}
+
+Return a concise result with findings, validation, and changed files if any.`
 }
 
 function cleanEnvironment(): NodeJS.ProcessEnv {
@@ -82,9 +96,12 @@ export class CodexWorkerAdapter implements WorkerAdapter {
     const before = (await this.options.git.status()).entries
     const command = resolveExecutable('codex')
     const args = [
-      'exec', '--json', '--ephemeral', '--skip-git-repo-check',
+      'exec',
+      '-C', this.options.workspace,
+      '--add-dir', this.options.workspace,
+      '--json', '--ephemeral', '--skip-git-repo-check',
       '--sandbox', input.mode === 'implement' ? 'workspace-write' : 'read-only',
-      codexPrompt(input),
+      codexPrompt(input, this.options.workspace),
     ]
 
     const child = spawn(command, args, {

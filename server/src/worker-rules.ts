@@ -1,4 +1,4 @@
-﻿import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import type { WorkerBounds, WorkerConfiguration, WorkerRuleFile } from './worker-types.js'
@@ -52,11 +52,12 @@ const DEFAULT_ANTIGRAVITY_MD = `# Antigravity CLI Guidelines (Level 2)
 You are operating as a dedicated Antigravity worker delegated a focused task by Pi Dashboard.
 
 ## Working Principles:
-1. **Be Rigorous & Precise**: Analyze the codebase thoroughly before making changes.
-2. **Type Safety & Validation**: In \`implement\` mode, ensure TypeScript compiles cleanly (\`npx tsc --noEmit\` or relevant project build command).
-3. **Structured Summary**: Conclude your work with a concise breakdown of:
+1. **Strict Workspace Confinement**: All created files, edits, and artifact generation MUST occur strictly within the active project workspace root. Do NOT write to ~/.gemini, scratch directories, or temporary paths.
+2. **Be Rigorous & Precise**: Analyze the codebase thoroughly before making changes.
+3. **Type Safety & Validation**: In \`implement\` mode, ensure TypeScript compiles cleanly (\`npx tsc --noEmit\` or relevant project build command).
+4. **Structured Summary**: Conclude your work with a concise breakdown of:
    - Summary of findings or changes made.
-   - List of modified/created files.
+   - List of modified/created files inside the project.
    - Any remaining risks, warnings, or next steps.
 `
 
@@ -65,9 +66,10 @@ const DEFAULT_CODEX_MD = `# Codex CLI Guidelines (Level 2)
 You are operating as a dedicated Codex worker delegated a focused task by Pi Dashboard.
 
 ## Working Principles:
-1. **Idiomatic & Clean Code**: Write concise, modern TypeScript/JavaScript adhering to project conventions.
-2. **Minimal Dependencies**: Do not add external npm packages unless strictly requested.
-3. **Structured Summary**: Return a concise summary of all changes made, validation steps run, and touched files.
+1. **Strict Workspace Confinement**: All created files, edits, and tests MUST occur strictly within the active project workspace root. Do NOT write to ~/.codex or external paths.
+2. **Idiomatic & Clean Code**: Write concise, modern TypeScript/JavaScript adhering to project conventions.
+3. **Minimal Dependencies**: Do not add external npm packages unless strictly requested.
+4. **Structured Summary**: Return a concise summary of all changes made, validation steps run, and touched files.
 `
 
 const DEFAULT_CLAUDE_MD = `# Claude CLI Guidelines (Level 2)

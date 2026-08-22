@@ -25,16 +25,30 @@ function changedFiles(before: GitStatusEntry[], after: GitStatusEntry[]): Worker
     .sort((left, right) => left.path.localeCompare(right.path))
 }
 
-function workerPrompt(input: WorkerRunInput): string {
+function workerPrompt(input: WorkerRunInput, workspace: string): string {
   const role = input.mode === 'implement'
-    ? 'You have permission to inspect and edit files in the current workspace. Implement the requested changes and verify correctness.'
+    ? 'You have permission to inspect and edit files inside the current workspace. Implement the requested changes and verify correctness.'
     : input.mode === 'review'
       ? 'Review the project read-only. Identify risks, defects, and concrete recommendations.'
       : 'Research the project read-only and report concise, evidence-based findings.'
 
   const rules = input.ruleContext ? `\n\nGuidelines:\n${input.ruleContext}\n` : ''
 
-  return `You are a bounded Antigravity CLI worker reporting back to Pi Dashboard.\n\nMode: ${input.mode}\n${role}${rules}\nWork only inside the current project. Return a concise, structured summary of your findings and actions.\n\nTask:\n${input.prompt}`
+  return `You are a bounded Antigravity CLI worker reporting back to Pi Dashboard.
+
+Active Project Workspace: ${workspace}
+CRITICAL WORKSPACE CONFINEMENT:
+- All inspected, created, or modified files MUST be located strictly inside the active project workspace root ("${workspace}").
+- Do NOT write to ~/.gemini, scratch directories, or temporary paths outside the workspace.
+- Write code and markdown files directly into the project directory.
+
+Mode: ${input.mode}
+${role}${rules}
+
+Task:
+${input.prompt}
+
+Return a concise, structured summary of your findings and actions inside "${workspace}".`
 }
 
 function cleanEnvironment(): NodeJS.ProcessEnv {
@@ -84,7 +98,8 @@ export class AntigravityWorkerAdapter implements WorkerAdapter {
     const timeout = `${Math.max(60, Math.ceil(input.bounds.timeoutMs / 1_000))}s`
     const command = resolveExecutable('agy')
     const args = [
-      '--print', workerPrompt(input),
+      '--add-dir', this.options.workspace,
+      '--print', workerPrompt(input, this.options.workspace),
       '--sandbox',
       '--disable-slash-commands',
       ...(input.mode === 'implement' ? ['--dangerously-skip-permissions'] : []),
