@@ -1,6 +1,7 @@
-﻿import { homedir, tmpdir } from 'node:os'
+﻿import { homedir } from 'node:os'
 import type { WebSocket } from 'ws'
 import pty from '@homebridge/node-pty-prebuilt-multiarch'
+import { resolveExecutable } from './process-control.js'
 
 export class WorkerConsoleSession {
   private ptyProcess: any = null
@@ -29,79 +30,80 @@ export class WorkerConsoleSession {
     let command: string
     let args: string[] = []
 
-    if (process.platform === 'win32') {
-      command = 'powershell.exe'
-      let cliCmd = ''
-      if (providerId === 'antigravity-cli') {
-        cliCmd = 'agy'
-      } else if (providerId === 'codex-cli') {
-        cliCmd = mode === 'login' ? 'codex login --device-auth' : 'codex'
-      } else if (providerId === 'claude-cli') {
-        cliCmd = mode === 'login' ? 'claude login' : 'claude'
-      } else {
-        cliCmd = 'pi'
-      }
-      args = ['-NoProfile', '-NoExit', '-Command', cliCmd]
+    if (providerId === 'antigravity-cli') {
+      command = resolveExecutable('agy')
+      args = []
+    } else if (providerId === 'codex-cli') {
+      command = resolveExecutable('codex')
+      args = mode === 'login' ? ['login', '--device-auth'] : []
+    } else if (providerId === 'claude-cli') {
+      command = resolveExecutable('claude')
+      args = mode === 'login' ? ['login'] : []
     } else {
-      command = '/bin/bash'
-      let cliCmd = ''
-      if (providerId === 'antigravity-cli') {
-        cliCmd = 'exec agy'
-      } else if (providerId === 'codex-cli') {
-        cliCmd = mode === 'login' ? 'exec codex login --device-auth' : 'exec codex'
-      } else if (providerId === 'claude-cli') {
-        cliCmd = mode === 'login' ? 'exec claude login' : 'exec claude'
-      } else {
-        cliCmd = 'exec pi'
-      }
-      args = ['-lc', cliCmd]
+      command = resolveExecutable('pi')
+      args = []
     }
 
-    const ptyModule = (pty as any).default || pty
-    const proc = ptyModule.spawn(command, args, {
-      name: 'xterm-256color',
-      cols: 100,
-      rows: 28,
-      cwd: cwd || homedir(),
-      env,
-    })
+    try {
+      const ptyModule = (pty as any).default || pty
+      const proc = ptyModule.spawn(command, args, {
+        name: 'xterm-256color',
+        cols: 100,
+        rows: 28,
+        cwd: cwd || homedir(),
+        env,
+      })
 
-    this.ptyProcess = proc
-    this.browser = browser
+      this.ptyProcess = proc
+      this.browser = browser
 
-    proc.onData((data: string) => {
-      if (browser.readyState === browser.OPEN) {
-        browser.send(Buffer.from(data, 'utf8'))
+      proc.onData((data: string) => {
+        if (browser.readyState === 1 /* WebSocket.OPEN */) {
+          browser.send(JSON.stringify({ type: 'output', data }))
+        }
+      })
+
+      proc.onExit(({ exitCode }: { exitCode: number }) => {
+        if (browser.readyState === 1) {
+          browser.send(JSON.stringify({ type: 'exit', exitCode }))
+        }
+        this.ptyProcess = null
+      })
+
+      browser.on('message', (raw: string | Buffer) => {
+        try {
+          const text = typeof raw === 'string' ? raw : raw.toString('utf8')
+          const message = JSON.parse(text) as { type?: string; data?: string; cols?: number; rows?: number }
+          if (message.type === 'input' && typeof message.data === 'string') {
+            proc.write(message.data)
+          } else if (message.type === 'resize' && typeof message.cols === 'number' && typeof message.rows === 'number') {
+            try {
+              proc.resize(Math.max(10, Math.min(300, message.cols)), Math.max(5, Math.min(100, message.rows)))
+            } catch {}
+          } else if (message.type === 'close') {
+            proc.kill()
+          }
+        } catch {}
+      })
+
+      browser.on('close', () => {
+        if (this.ptyProcess) {
+          try { this.ptyProcess.kill() } catch {}
+          this.ptyProcess = null
+        }
+        if (this.browser === browser) this.browser = null
+      })
+
+      // Send initial ready signal
+      if (browser.readyState === 1) {
+        browser.send(JSON.stringify({ type: 'ready' }))
       }
-    })
-
-    const finish = (code = 1000, reason = 'Worker console closed'): void => {
-      if (this.ptyProcess === proc) this.ptyProcess = null
-      if (this.browser === browser) this.browser = null
-      if (browser.readyState === browser.OPEN) browser.close(code, reason.slice(0, 120))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to spawn worker console process'
+      if (browser.readyState === 1) {
+        browser.send(JSON.stringify({ type: 'error', message }))
+      }
     }
-
-    proc.onExit(() => finish())
-
-    browser.on('message', (data) => {
-      if (this.ptyProcess !== proc) return
-      const text = typeof data === 'string' ? data : Buffer.isBuffer(data) ? data.toString('utf8') : new TextDecoder().decode(data as ArrayBuffer)
-      try {
-        const parsed = JSON.parse(text)
-        if (parsed.type === 'resize' && typeof parsed.cols === 'number' && typeof parsed.rows === 'number') {
-          proc.resize(Math.max(20, Math.min(200, parsed.cols)), Math.max(5, Math.min(100, parsed.rows)))
-          return
-        }
-        if (parsed.type === 'input' && typeof parsed.data === 'string') {
-          proc.write(parsed.data)
-          return
-        }
-      } catch {}
-      proc.write(text)
-    })
-
-    browser.once('error', () => void this.stop())
-    browser.once('close', () => void this.stop())
   }
 
   async stop(): Promise<void> {
