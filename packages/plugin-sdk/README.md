@@ -1,10 +1,13 @@
 # Pi Dashboard Plugin SDK v1
 
-This package is the versioned, browser-safe contract shared by Dashboard host validation, plugin authors, and fixtures. It contains no private Dashboard implementation imports.
+This package provides the versioned manifest schema, types, path validation, and message protocols shared across the Dashboard host, plugin authors, and test suites.
 
-## Current accepted package shape
+## Supported Manifest Shapes
 
-SDK v1 validates permission-free static frontend packages:
+The SDK validates both **Static (Frontend-Only)** and **Hosted (Backend & Agent-Connected)** plugin manifests.
+
+### 1. Static Plugin Manifest
+For browser-only tools, visualizers, games, or calculators:
 
 ```json
 {
@@ -12,70 +15,115 @@ SDK v1 validates permission-free static frontend packages:
   "id": "example-plugin",
   "name": "Example Plugin",
   "version": "1.0.0",
-  "dashboardVersion": ">=0.9.0",
-  "description": "Example",
-  "entry": { "frontend": "index.html" },
-  "navigation": { "label": "Example", "icon": "□" },
+  "dashboardVersion": ">=0.9.0-beta.1 <2.0.0",
+  "description": "A standalone browser plugin",
+  "entry": {
+    "frontend": "index.html"
+  },
+  "navigation": {
+    "label": "Example",
+    "icon": "◇"
+  },
   "permissions": []
 }
 ```
 
-New repository installs and upgrades must declare `dashboardVersion`; incompatible ranges are rejected before approval. Previously installed beta packages without a range remain visible so an update does not silently discard their code, enablement, or retained data.
+### 2. Hosted Agent-Connected Manifest
+For plugins that provide persistent data, server logic, or Pi agent tools and skills:
 
-The host currently passes an empty supported-permission list. Known future permission names are defined so packages can be reviewed against a stable vocabulary, but any nonzero permission is rejected until the matching host service and isolation boundary are implemented.
+```json
+{
+  "schemaVersion": 1,
+  "id": "todo-tracker",
+  "name": "To-Do Tracker",
+  "version": "1.0.0",
+  "dashboardVersion": ">=0.9.0-beta.1 <2.0.0",
+  "description": "Manage tasks with UI and Pi assistant access",
+  "entry": {
+    "frontend": "index.html",
+    "backend": {
+      "protocol": "host-module",
+      "module": "server.ts"
+    }
+  },
+  "agent": {
+    "skills": [
+      {
+        "name": "todo-guide",
+        "description": "Explains how to use the todo tracker tools",
+        "path": "skills/todo-guide"
+      }
+    ],
+    "tools": [
+      {
+        "name": "list_tasks",
+        "label": "List tasks",
+        "description": "List all active tasks",
+        "access": "read",
+        "method": "GET",
+        "path": "/agent/tasks",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      }
+    ]
+  },
+  "navigation": {
+    "label": "To-Do",
+    "icon": "✓"
+  },
+  "permissions": [
+    "plugin-data:read",
+    "plugin-data:write"
+  ]
+}
+```
 
-Trusted bundled plugins may request an allowlisted Dashboard navigation action with a validated host message. The first supported target is `session:<session-id>`, which resumes that exact Dashboard Chat session. Repository-installed static plugins cannot invoke host navigation. Unknown targets and malformed IDs are ignored.
+## Manifest Specification
 
-Exports include:
+- **`schemaVersion`**: Must be `1`.
+- **`id`**: Lowercase alphanumeric string with hyphens (`^[a-z][a-z0-9-]{1,47}$`).
+- **`version`**: Semantic version string (e.g. `1.0.0`).
+- **`dashboardVersion`**: Semantic version range string (e.g. `>=0.9.0-beta.1 <2.0.0`). Required for repository review.
+- **`entry.frontend`**: Relative path to the entry HTML file (e.g. `index.html`).
+- **`entry.backend`**:
+  - `protocol`: `"host-module"` (In-process handler executed via `PluginHost`).
+  - `module`: Relative path to server script (e.g. `server.ts` or `server.js`).
+- **`agent.tools`**: Array of 1–24 tool declarations. Paths must start with `/agent/`. Each tool requires an explicit `access` classification (`"read"` or `"write"`).
+- **`agent.skills`**: Array of skill declarations pointing to directories with a `SKILL.md` file.
+- **`permissions`**: Supported permissions:
+  - `plugin-data:read`: Read from plugin-private storage.
+  - `plugin-data:write`: Write to plugin-private storage.
+  - `dashboard-theme:read`: Read current dashboard theme.
+  - `dashboard-notifications:write`: Send dashboard notifications.
 
-- manifest schema/version constants and TypeScript types;
-- safe relative-path and manifest validation;
-- semantic plugin-version comparison; and
-- bounded plugin-to-host message validation and allowlisted navigation-target parsing.
+## Frontend to Host PostMessage Bridge
 
-## Static lifecycle
+Frontend iframes communicate with their backend runtime by posting messages to the parent Dashboard:
 
-Repository packages are reviewed at a pinned Git commit and approved by digest. A newer semantic version from the same approved repository may be upgraded. Dashboard keeps one prior code package for reversible rollback, temporarily denies the plugin during an atomic code swap, and preserves enablement afterward.
-
-Removal always deletes installed and rollback code. Plugin data is a separate explicit choice: **Remove, keep data** or **Remove + delete data**. Static v1 plugins have no data permission, but the lifecycle boundary is established before stateful plugins arrive.
-
-## Bundled backend boundary
-
-Trusted bundled manifests may declare `entry.backend.protocol: "http-unix-v1"` and known narrow permissions. The host exposes only `/api/plugins/:pluginId/runtime/*`, verifies installed/enabled bundled ownership, applies normal authentication/origin checks, strips browser credentials, bounds request/response sizes and time, and forwards to `/run/pi-dashboard-plugins/:pluginId/:pluginId.sock`. Repository-installed packages cannot declare backend entries or nonzero permissions.
-
-This contract does not itself start a plugin service. Each stateful bundled plugin still needs a separately restricted service/container with only its code, namespaced data, and private socket mounted. Dashboard refuses enablement until `GET /_health` on that socket confirms the exact plugin ID and installed version.
-
-Trusted bundled plugins may declare immutable instruction packages under `agent.skills`. Each entry points to a package directory containing `SKILL.md`. Instruction-only skills follow plugin enablement; a skill with `access: "read"` or `"write"` also requires the matching PI grant and matching declared tool class.
-
-Bundled backends may also declare optional PI tools under `agent.tools`. Every tool has a bounded JSON object parameter schema, an `/agent/*` runtime path, and an explicit `read` or `write` classification. Dashboard enablement, PI read access, and PI write access are independent controls. PI only receives tools while the plugin is enabled and the matching access class is granted; changing either control reloads PI's skill and tool inventory.
-
-Repository packages remain static and cannot declare Pi tools. The Plugins page can send a plugin idea or reference to Pi for authoring, and it can review a standalone repository created beneath the mounted workspace with a `workspace:<path>` source. This does not relax the repository package boundary.
-
-Sandboxed frames retain `sandbox="allow-scripts"` without same-origin access. The host gives each enabled plugin a process-scoped, per-plugin frontend asset capability in its iframe URL so relative packaged CSS, JavaScript, fonts, and images can load without Dashboard cookies. The capability grants no API/runtime access, is denied while the plugin is disabled, cannot load another plugin's files, and rotates whenever the backend restarts.
-
-A bundled plugin calls its own runtime by posting a validated message to its parent:
-
-```js
+```javascript
+// Request to backend host-module:
 parent.postMessage({
   schemaVersion: 1,
-  pluginId: 'calendar',
+  pluginId: 'todo-tracker',
   type: 'runtime-request',
   requestId: crypto.randomUUID(),
   method: 'GET',
-  path: '/events?from=2026-01-01',
+  path: '/api/tasks',
 }, '*')
+
+// Host responds with:
+// { schemaVersion: 1, pluginId: 'todo-tracker', type: 'runtime-response', requestId, status: 200, body: [...] }
 ```
 
-The host accepts messages only from that plugin's active frame, limits methods, paths, body size, traversal, and concurrency, and returns a `runtime-response` with the same request ID. Dashboard cookies and authentication headers are never sent to the frame or plugin service.
+## Repository Installation & Lifecycle
 
-## Not yet supported
+Repository plugins are reviewed from a pinned Git commit and verified with a SHA256 digest:
+- Supported repository formats: `workspace:plugins/<id>`, `local:<id>`, or `https://github.com/<owner>/<repo>`.
+- Installed to `~/.pi/agent/dashboard/plugins/installed/<id>`.
+- One previous version is retained in `backups/code/` for instant rollback.
+- Data is isolated under `~/.pi/agent/dashboard/plugins/data/<id>`.
+- Removing a plugin allows choosing between retaining or permanently deleting its stored data.
 
-- repository-installed backend entries or runtime processes;
-- repository-installed Pi tools;
-- nonzero permissions for repository packages;
-- package builds/install scripts;
-- signed `.pi-plugin` artifacts;
-- state migrations; or
-- public marketplace distribution.
-
-Do not represent these as available until their runtime, permission, lifecycle, and host acceptance work passes independently.

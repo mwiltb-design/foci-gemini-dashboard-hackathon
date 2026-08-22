@@ -1,186 +1,294 @@
-# Pi Dashboard plugin authoring contract
+# Pi Dashboard Plugin Authoring Contract
 
-This bundled reference is the maintained implementation map for plugin work. The accepted product model is authoritative: Dashboard enablement and Pi access are independent, repository installs remain static, and agent-connected plugins are trusted bundled services.
+This reference is the authoritative implementation map for all Dashboard plugin development.
 
-## Choose the package type
+## 1. Supported Package Type Matrix
 
-| Request | Package type | Result |
-| --- | --- | --- |
-| Install code the user explicitly trusts and it already has a compatible root `plugin.json` | Trusted static install | Review and approve its exact Git commit in Plugins; do not rebuild |
-| UI, game, visualization, calculator, or other browser-only feature | Static repository plugin | Standalone repository under `plugins/<id>`; install with `workspace:plugins/<id>` |
-| Pi must list, create, update, or delete plugin-owned records | Hosted agent-connected plugin | Frontend, hosted module, manifest tools, plugin-private storage, and host tests |
-| Durable data is shared between the UI and Pi | Bundled agent-connected plugin | Same as above, even if the data model is small |
-| Website or repository is an example but not a Dashboard plugin | Author from reference | Reproduce useful behavior using one of the preceding two types |
+| Category | Typical Use Cases | Location | Manifest Backend | Manifest Agent Tools & Skills | Permissions | Source Identifier / Installation | Restart Required |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Static Workspace Plugin** | Calculators, reference cards, visualizers, browser games | Workspace: `plugins/<id>/` | None | None | `[]` | `workspace:plugins/<id>` (Plugins page review) | **None** |
+| **Hosted Agent-Connected Workspace Plugin** | Project task lists, custom logs, databases, tools Pi can query or mutate | Workspace: `plugins/<id>/` | `protocol: "host-module"`, `module: "server.ts"` | Supported (`/agent/*` tools, `skills/`) | `plugin-data:read`, `plugin-data:write` | `workspace:plugins/<id>` (Plugins page review) | **None** |
+| **Local Machine Plugin** | Private developer plugins stored across projects | `~/.pi/agent/plugins/<id>/` | Optional `host-module` | Optional `/agent/*` | Supported | `local:<id>` (Plugins page review) | **None** |
+| **Bundled First-Party Plugin** | Core plugins shipped with Dashboard (e.g. `notes`) | Dashboard: `plugins/<id>/` | `protocol: "host-module"` | Supported | Supported | Auto-discovered at Dashboard startup | Server restart on file change |
 
-Trust changes whether compatible static code is rebuilt. It never bypasses exact-commit review, compatibility, manifest, path, size, provenance, or permission checks, and never grants backend or Pi access to a repository package.
+---
 
-## Read only the routed files
+## 2. Decision Rule
 
-Always read:
+- **Testing or building for the active project?** → Create a standalone Git repository in the active workspace at `plugins/<plugin-id>`. Provide `workspace:plugins/<plugin-id>` for installation via the Plugins page.
+- **Creating a first-party feature for the Dashboard repository?** → Place directly in the Dashboard codebase `plugins/<plugin-id>`.
 
-- `packages/plugin-sdk/README.md` for the supported boundary.
-- `packages/plugin-sdk/src/index.ts` for the authoritative manifest schema and validators.
+---
 
-For a static plugin, also read:
+## 3. Routed Files
 
-- `examples/plugins/hello/plugin.json`
-- `examples/plugins/hello/index.html`
-- the repository review limits near the top of `server/src/plugin-service.ts`
+Always inspect:
+- `packages/plugin-sdk/src/index.ts` (Manifest types and validation)
+- `packages/plugin-sdk/README.md` (SDK contract)
 
-For an agent-connected hosted plugin, also read:
+For hosted or agent-connected plugins, inspect:
+- `plugins/notes/plugin.json` (Reference manifest)
+- `plugins/notes/server.ts` (Reference host-module backend)
+- `plugins/notes/app.js` (Reference frontend postMessage client)
+- `server/src/plugin-host.ts` (Backend module runtime & storage)
+- `server/src/plugin-service.ts` (Review, installation, and lifecycle)
+- `server/extensions/dashboard-plugin-tools.ts` (Pi dynamic tool registration)
 
-- `plugins/notes/plugin.json`
-- `plugins/notes/index.html`
-- `plugins/notes/app.js`
-- `plugins/notes/server.ts`
-- `packages/plugin-runtime/src/index.ts`
-- `server/src/plugin-host.ts`
-- `server/extensions/dashboard-plugin-tools.ts`
-- `server/test/bundled-review-plugins.test.ts`
-- `server/test/plugin-host.test.ts`
-- `server/test/shared-notes-migration.test.ts`
-- the plugin policy tests under `server/test/`
+For UI interactions:
+- `ui/src/components/PluginManager.tsx`
+- `ui/src/components/PluginBrowser.tsx`
 
-For manager behavior or authoring prompts, read:
+---
 
-- `app/src/components/PluginManager.tsx`
-- the plugin-related sections of `app/src/styles.css`
+## 4. End-to-End Plugin Examples
 
-Do not inspect unrelated Core views, memory, sessions, workers, packaging, or roadmap documents unless the requested change actually crosses that boundary.
+### Example A: Static Workspace Plugin
 
-## Static repository contract
-
-A static plugin is a standalone Git repository whose root contains:
-
+**Folder structure:**
 ```text
-plugin.json
-index.html
-optional browser-safe CSS, JS, fonts, and images
+<workspace>/plugins/quick-calc/
+├── plugin.json
+├── index.html
+└── styles.css
 ```
 
-Required manifest shape:
-
+**`plugin.json`:**
 ```json
 {
   "schemaVersion": 1,
-  "id": "example-plugin",
-  "name": "Example Plugin",
-  "version": "0.1.0",
-  "description": "What it does.",
-  "dashboardVersion": ">=0.9.0-beta.1 <1.0.0",
-  "entry": { "frontend": "index.html" },
-  "navigation": { "label": "Example", "icon": "◇" },
+  "id": "quick-calc",
+  "name": "Quick Calculator",
+  "version": "1.0.0",
+  "description": "Simple browser-based developer calculator.",
+  "dashboardVersion": ">=0.9.0-beta.1 <2.0.0",
+  "entry": {
+    "frontend": "index.html"
+  },
+  "navigation": {
+    "label": "Calculator",
+    "icon": "🧮"
+  },
   "permissions": []
 }
 ```
 
-Rules:
+**Setup & Installation:**
+```bash
+cd plugins/quick-calc
+git init
+git add -A
+git commit -m "feat: initial calculator plugin"
+```
+Install in Dashboard: **Plugins** → **Add plugin** → Enter `workspace:plugins/quick-calc` → **Review repository** → **Install plugin**.
 
-- IDs are lowercase letters, numbers, and single hyphens, begin with a letter, and are at most 48 characters.
-- Use semantic versions and a compatible `dashboardVersion`.
-- Keep paths relative and forward-slashed.
-- Repository packages cannot declare `entry.backend`, `agent`, or permissions.
-- The iframe is opaque-origin and sandboxed with scripts only. Packaged relative assets load through a process-scoped, per-plugin host capability; do not depend on same-origin storage, Dashboard cookies, direct host DOM access, or remote assets.
-- Prefer plain HTML/CSS/JS with local assets. There is no package install or build step during Dashboard review.
-- Repositories may contain only non-executable regular files: at most 200 files and 5 MB total, with no file over 5 MB.
-- Never include secrets, symlinks, submodules, generated dependency trees, analytics, or remote executable code.
-- Initialize a nested Git repository and make a local commit only after validation. Dashboard reviews committed `HEAD`, not uncommitted files.
+---
 
-## Hosted agent-connected contract
+### Example B: Hosted Agent-Connected Workspace Plugin
 
-Use this only for trusted first-party code maintained with Dashboard.
+**Folder structure:**
+```text
+<workspace>/plugins/project-todo/
+├── plugin.json
+├── index.html
+├── app.js
+├── server.ts
+└── skills/
+    └── project-todo-guide/
+        └── SKILL.md
+```
 
-The manifest may add:
-
+**`plugin.json`:**
 ```json
 {
+  "schemaVersion": 1,
+  "id": "project-todo",
+  "name": "Project To-Do",
+  "version": "1.0.0",
+  "description": "Manage project tasks with UI and Pi assistant access.",
+  "dashboardVersion": ">=0.9.0-beta.1 <2.0.0",
   "entry": {
     "frontend": "index.html",
-    "backend": { "protocol": "host-module", "module": "server.ts" }
+    "backend": {
+      "protocol": "host-module",
+      "module": "server.ts"
+    }
   },
   "agent": {
     "skills": [
       {
-        "name": "review-items",
-        "description": "Review the plugin items without changing them.",
-        "path": "skills/review-items",
-        "access": "read"
+        "name": "project-todo-guide",
+        "description": "Instructions on how to manage project tasks via Project To-Do.",
+        "path": "skills/project-todo-guide"
       }
     ],
     "tools": [
       {
-        "name": "list_items",
-        "label": "List items",
-        "description": "List the plugin items visible to the user.",
+        "name": "list_tasks",
+        "label": "List tasks",
+        "description": "List all current project tasks.",
         "access": "read",
         "method": "GET",
-        "path": "/agent/items",
+        "path": "/agent/tasks",
         "parameters": {
           "type": "object",
           "properties": {},
           "additionalProperties": false
         }
+      },
+      {
+        "name": "add_task",
+        "label": "Add a task",
+        "description": "Add a new task to the project list.",
+        "access": "write",
+        "method": "POST",
+        "path": "/agent/tasks",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "Task description, up to 120 characters."
+            }
+          },
+          "required": ["title"],
+          "additionalProperties": false
+        }
       }
     ]
   },
-  "permissions": ["plugin-data:read", "plugin-data:write"]
+  "navigation": {
+    "label": "To-Do",
+    "icon": "✓"
+  },
+  "permissions": [
+    "plugin-data:read",
+    "plugin-data:write"
+  ]
 }
 ```
 
-Rules:
+**`server.ts`:**
+```typescript
+interface Task {
+  id: string
+  title: string
+  completed: boolean
+}
 
-- Plugin-owned skills live inside the bundled plugin at `skills/<skill-name>/SKILL.md` and are declared in `agent.skills`.
-- Instruction-only plugin skills follow plugin enablement. Skills declaring `read` or `write` access appear to PI only when the matching grant is active.
-- Plugin skills are immutable package code. Do not copy them into personal or project skill storage or make them individually toggleable.
+export default {
+  async handle(request: any, context: any) {
+    // 1. UI route: GET /api/tasks
+    if (request.method === 'GET' && request.path === '/api/tasks') {
+      const tasks = await context.storage.readJson('tasks.json', [])
+      return context.json(tasks)
+    }
 
-- Tools require a backend. Use 1–24 unique narrow tools with lowercase names.
-- Tool paths must begin `/agent/`. Parameters must be bounded object schemas using only string, number, integer, or boolean properties and `additionalProperties: false`.
-- `read` means observation only. Any creation, mutation, deletion, send, or external effect is `write`.
-- Reuse the same service handler for UI and agent routes only when authorization and validation remain equivalent.
-- Persist only in the plugin's private host storage. Use `context.storage.transaction(...)` for read-modify-write operations, write atomically, and bound record counts and field sizes.
-- Use `server/src/plugin-host.ts` APIs: `context.json(...)`, `request.json()`, and plugin-private storage. Do not reach into Dashboard credentials, sessions, memories, or unrelated plugin data.
-- The frontend reaches its runtime only through the validated parent `postMessage` bridge. It never receives Dashboard credentials.
-- Trusted bundled frontends may request an allowlisted host navigation target such as `session:<session-id>`; repository-installed static plugins cannot navigate the host. Unknown or malformed targets are ignored.
-- Enabling the plugin must not automatically grant Pi access. Pi read and write grants remain separate user choices.
-- Disabling preserves plugin data and revokes UI/runtime/tool availability.
+    // 2. Pi read tool route: GET /agent/tasks
+    if (request.method === 'GET' && request.path === '/agent/tasks') {
+      const tasks = await context.storage.readJson('tasks.json', [])
+      return context.json({ tasks })
+    }
 
-Do not make a third-party repository agent-connected by relaxing validation. Repository plugins may use hosted modules only through the reviewed hosted repository path; never allow the old `http-unix-v1` sidecar protocol for repository installs.
+    // 3. Pi write tool route: POST /agent/tasks
+    if (request.method === 'POST' && request.path === '/agent/tasks') {
+      const body = request.json()
+      const title = String(body.title || '').trim()
+      if (!title) return context.json({ error: 'Title is required' }, 400)
 
-## Reference handling
+      const task: Task = { id: `task-${Date.now()}`, title, completed: false }
+      await context.storage.transaction(async (tx: any) => {
+        const list = await tx.readJson('tasks.json', [])
+        list.push(task)
+        await tx.writeJson('tasks.json', list)
+      })
+      return context.json({ success: true, task })
+    }
 
-When given a GitHub URL:
+    return context.json({ error: 'Not found' }, 404)
+  }
+}
+```
 
-1. Determine whether it is already a compatible static Dashboard plugin.
-2. If it is and the user explicitly trusts it, use exact-commit review rather than rebuilding.
-3. Otherwise treat it as a behavioral reference. Inspect only files needed to understand that behavior.
-4. Check its license before copying code. Without a compatible license, implement behavior independently.
-5. Exclude branding, copyrighted assets, telemetry, credentials, hosted services, and unrelated features.
+**`app.js` (Frontend PostMessage Bridge):**
+```javascript
+async function requestRuntime(method, path, body) {
+  const requestId = crypto.randomUUID()
+  return new Promise((resolve, reject) => {
+    function onMessage(event) {
+      if (event.data?.type === 'runtime-response' && event.data?.requestId === requestId) {
+        window.removeEventListener('message', onMessage)
+        if (event.data.status >= 200 && event.data.status < 300) resolve(event.data.body)
+        else reject(new Error(event.data.body?.error || `Status ${event.data.status}`))
+      }
+    }
+    window.addEventListener('message', onMessage)
+    parent.postMessage({
+      schemaVersion: 1,
+      pluginId: 'project-todo',
+      type: 'runtime-request',
+      requestId,
+      method,
+      path,
+      body,
+    }, '*')
+  })
+}
+```
 
-When given a website, study visible behavior and public documentation. Do not attempt to bypass authentication, copy private data, or reproduce protected branding/assets.
+**`skills/project-todo-guide/SKILL.md`:**
+```markdown
+---
+name: project-todo-guide
+description: Guide for reading and adding tasks using the Project To-Do plugin.
+---
 
-## Acceptance checks
+# Project To-Do Guide
 
-For every plugin:
+Use `plugin_project_todo_list_tasks` to check existing tasks.
+Use `plugin_project_todo_add_task` to add a new task when requested by the user.
+```
 
-- Validate `plugin.json` against `packages/plugin-sdk/src/index.ts`.
-- Confirm the frontend entry and every referenced local asset exist.
-- Test empty, normal, long, and invalid inputs.
-- Verify the UI at narrow and wide sizes and confirm iframe errors are visible.
-- Run `npm run build` in `app`.
-- Run `npm run build` in `server`.
+**Setup & Installation:**
+```bash
+cd plugins/project-todo
+git init
+git add -A
+git commit -m "feat: initial project-todo plugin"
+```
+Install in Dashboard:
+1. **Plugins** → **Add plugin** → Enter `workspace:plugins/project-todo` → **Review repository** → **Install plugin**.
+2. Click **Enable** on the plugin card.
+3. Under **Pi Access**, click **Grant read access** and **Grant write access** to allow Pi to execute the to-do tools.
+4. **No Dashboard rebuild or restart is required!**
 
-For static repository plugins:
+---
 
-- Confirm `git status` is clean inside the nested repository.
-- Review through `workspace:plugins/<id>`.
-- Verify exact commit, files, size, compatibility, install-disabled behavior, enable/open, disable denial, upgrade, rollback, and removal when lifecycle code changed.
-- Confirm no backend, agent tools, permissions, executable files, symlinks, or build/install execution.
+### Example C: Bundled First-Party Hosted Plugin
+For plugins distributed with the Dashboard codebase itself:
+- Located directly in `plugins/<plugin-id>/` (e.g. `plugins/notes/`).
+- Discovered automatically when the Dashboard backend boots.
+- Does not need git repository initialization inside the plugin directory.
 
-For hosted agent-connected plugins:
+---
 
-- Add focused manifest/service tests modeled on `server/test/bundled-review-plugins.test.ts`.
-- Run plugin host, plugin service, asset policy, SDK, and dynamic tool-extension tests.
-- Verify no hosted module is loaded while inactive.
-- Verify persistence across restart, disable without deletion, and explicit retained-data deletion.
-- In chat, verify tools are absent with grants off, read tools appear only with read access, and mutations fail until write access is granted.
-- Exercise every tool once through Pi and confirm the UI shows the same state.
+## 5. Security & Isolation Constraints
+
+- **Iframe Sandbox:** Ran with `sandbox="allow-scripts allow-forms"`. Direct DOM access to parent Dashboard or cookie access is denied.
+- **Storage Isolation:** Host storage is strictly namespaced under `~/.pi/agent/dashboard/plugins/data/<plugin-id>`. Path traversal (`..`) is blocked.
+- **Tool Protocol:** Pi tools must use `/agent/*` route prefixes. Parameter schemas must be explicit JSON Schema objects.
+- **Decoupled Permissions:** Enabling a plugin does **not** grant Pi tools access. Users must explicitly grant Pi **Read** and **Write** permissions in the UI.
+
+---
+
+## 6. Acceptance Checks
+
+Before handing off a plugin:
+1. **Static Validation:** Validate `plugin.json` format, required fields, and relative paths.
+2. **Git Status:** In repository plugins, ensure all files are committed (`git status` is clean).
+3. **Review & Installation:** Test review and install via **Plugins** page (`workspace:plugins/<id>`). Verify SHA256 digest is generated.
+4. **Enable & Runtime:** Enable the plugin and confirm UI loads cleanly.
+5. **Agent Tools Test:** If agent tools are present, verify in chat:
+   - Tools are inactive when grants are disabled.
+   - Read tools function when Read grant is enabled.
+   - Write tools function when Write grant is enabled.
+6. **Workspace Build:** Run `npm run build` from the workspace root to confirm TypeScript compiles cleanly.

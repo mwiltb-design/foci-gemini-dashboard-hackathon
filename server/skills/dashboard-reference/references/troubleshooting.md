@@ -29,15 +29,17 @@ Also verify the live plugin asset response header contains:
 content-security-policy: sandbox allow-scripts allow-forms
 ```
 
-## Start The Matching Plugin Service Before Enabling This Plugin
+## Plugin Backend Protocol Errors
 
-That error belongs to the old sidecar-service plugin model. New hosted plugins should use:
+Pi Dashboard 2.0 uses in-process hosted modules (`host-module`) for all backend and agent-connected plugins. The old Docker/socket sidecar protocol (`http-unix-v1`) is completely phased out.
+
+All plugins with backend logic must declare:
 
 ```json
 "backend": { "protocol": "host-module", "module": "server.ts" }
 ```
 
-If the plugin still declares `http-unix-v1`, it expects a matching sidecar service and Compose socket. For new first-party plugin work, prefer hosted modules unless isolation requirements justify a sidecar.
+If a plugin fails validation with an invalid backend protocol, ensure its manifest uses `protocol: "host-module"` and contains a valid `server.ts` exporting a default handler object.
 
 ## Login Works Locally But Mutations Fail Remotely
 

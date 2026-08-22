@@ -2,30 +2,39 @@
 
 Use this document to orient plugin questions before implementing. For implementation, also use the `dashboard-plugin-authoring` skill.
 
-## Plugin Types
+## Supported Plugin Matrix
 
-### Static Repository Plugin
+Pi Dashboard supports four plugin variations based on distribution (Bundled vs Repository-Installed) and capability (Static UI vs Hosted Backend with Pi Access):
 
-Use for browser-only features such as visual tools, calculators, games, dashboards, or simple embedded views.
+| Plugin Type | Source Location | Manifest Backend (`entry.backend`) | Agent Tools & Skills (`agent`) | Permissions | Installation Procedure | Dashboard Restart / Rebuild |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Bundled Static** | Dashboard repo `plugins/<id>/` | None | None | `[]` | Auto-discovered at startup | Requires server start/restart |
+| **Bundled Hosted** | Dashboard repo `plugins/<id>/` | `protocol: "host-module"` | Supported (`/agent/*` tools, `skills/`) | Supported (`plugin-data:*`, `dashboard-*`) | Auto-discovered at startup | Requires server start/restart |
+| **Repository Static** | Standalone Git repo (`workspace:`, `local:`, GitHub) | None | None | `[]` | Plugins page: Review commit & Install | **None** (instant runtime install) |
+| **Repository Hosted** | Standalone Git repo (`workspace:`, `local:`, GitHub) | `protocol: "host-module"` | Supported (`/agent/*` tools, `skills/`) | Supported (`plugin-data:*`, `dashboard-*`) | Plugins page: Review commit & Install | **None** (instant runtime install) |
 
-Required files:
+> [!NOTE]
+> Pi Dashboard 2.0 uses the in-process `host-module` runtime for all backend and agent-connected plugins. The legacy `http-unix-v1` socket sidecar protocol has been completely removed.
 
-```text
-plugin.json
-index.html
-optional local CSS/JS/assets
-```
+## Repository Source Formats
 
-Static repository plugins:
+When installing or reviewing a repository plugin through **Plugins → Add plugin**, three source formats are supported:
 
-- are installed from a reviewed exact Git commit or `workspace:` path;
-- cannot declare backend runtime, Pi tools, Pi skills, or plugin data permissions;
-- should not require `npm install`, build scripts, remote scripts, credentials, symlinks, or generated dependency folders;
-- run in a sandboxed iframe and communicate only with the host mechanisms allowed by the platform.
+1. **Workspace Repository (`workspace:plugins/<plugin-id>`)**:
+   - Resolved relative to the active project workspace root (`PI_DASHBOARD_WORKSPACE`).
+   - Must be an initialized Git repository with committed files (`git init && git add -A && git commit`).
+   - Strict path boundary containment is enforced (paths escaping with `..` are blocked).
+2. **Local Repository (`local:<plugin-id>`)**:
+   - Resolved against the user's local plugins directory (`~/.pi/agent/plugins/<plugin-id>`) or fallback bundled root.
+   - Must be a valid Git repository with committed files.
+3. **Public GitHub Repository (`https://github.com/<owner>/<repo>`)**:
+   - Cloned on demand at a shallow depth for exact-commit review and SHA256 digest pinning.
 
-### Hosted Plugin
+## Hosted Backend (`host-module`) Architecture
 
-Use for trusted plugins that need server logic, durable plugin-owned data, or Pi tools. A hosted plugin declares:
+Hosted plugins run inside the Dashboard backend process via `PluginHost` (`server/src/plugin-host.ts`), providing persistent storage and API endpoints without external sidecar processes.
+
+A hosted plugin declares:
 
 ```json
 "entry": {
@@ -34,82 +43,76 @@ Use for trusted plugins that need server logic, durable plugin-owned data, or Pi
 }
 ```
 
-Hosted modules run inside the Dashboard backend host, not in a separate sidecar container. They receive a bounded request object and a `PluginHostContext` with plugin-private storage and response helpers.
+The backend module (`server.ts`) exports a default object with a `handle(request, context)` method:
 
-Use hosted plugins for new first-party plugins that need data or Pi access. Do not add a special Compose service unless there is a clear runtime requirement that the hosted module cannot satisfy.
+```typescript
+export default {
+  async handle(request: PluginHostRequest, context: PluginHostContext) {
+    if (request.method === 'GET' && request.path === '/api/items') {
+      const items = await context.storage.readJson('items.json', [])
+      return context.json(items)
+    }
+    if (request.method === 'POST' && request.path === '/agent/items') {
+      const body = request.json<{ text: string }>()
+      // Handle Pi agent write tool...
+      return context.json({ success: true })
+    }
+  }
+}
+```
 
-## Shared Notes Pattern
+### Context Services (`PluginHostContext`):
+- `context.storage`: Plugin-private atomic JSON/text file storage (`readJson`, `writeJson`, `readText`, `writeText`, `transaction`).
+- `context.json(data, status?)`: Helper to return standard JSON responses.
+- `context.text(data, status?)`: Helper to return text responses.
 
-Shared Notes is the reference hosted plugin:
+## Shared Notes Reference Pattern
 
-- manifest: `plugins/notes/plugin.json`
-- UI: `plugins/notes/index.html`
-- UI bridge: `plugins/notes/app.js`
-- hosted backend: `plugins/notes/server.ts`
-- host runtime: `server/src/plugin-host.ts`
+`plugins/notes/` serves as the reference implementation for hosted agent-connected plugins:
 
-Its browser UI sends runtime requests through the parent Dashboard iframe bridge. Its backend stores data in plugin-private JSON storage. Pi tools use `/agent/*` routes and require explicit read/write grants.
+- Manifest: `plugins/notes/plugin.json`
+- Frontend UI: `plugins/notes/index.html`
+- PostMessage Bridge Client: `plugins/notes/app.js`
+- Hosted Backend Module: `plugins/notes/server.ts`
+- Host Runtime: `server/src/plugin-host.ts`
 
-## Pi Access Model
+The frontend communicates with its backend by posting `runtime-request` messages to the parent window, and receives `runtime-response` messages.
 
-Plugin enablement and Pi access are separate.
+## Pi Agent Access Model
 
-- Enabling a plugin makes the plugin UI/runtime available.
-- Pi read access exposes read-only plugin tools/skills.
-- Pi write access exposes mutation tools.
-- Write tools must create, update, delete, send, or otherwise affect state only when the user has granted write access.
+Plugin enablement and Pi access are strictly decoupled:
 
-Every Pi-facing tool must have:
+1. **Plugin Enablement**: Toggling a plugin ON makes the frontend UI and backend routes available.
+2. **Pi Read Access**: Explicit user grant required in the Plugins UI. Exposes read-only `/agent/*` tools and read-dependent skills to Pi.
+3. **Pi Write Access**: Explicit user grant required in the Plugins UI. Exposes mutation tools (`POST`, `PUT`, `DELETE`, etc.) to Pi.
 
-- a narrow name;
-- an honest `read` or `write` classification;
-- a bounded parameter schema;
-- a route beginning with `/agent/`.
+Every Pi tool must declare:
+- A unique lowercase name (`^[a-z][a-z0-9_]{1,39}$`).
+- An honest `read` or `write` access classification.
+- A path beginning with `/agent/*`.
+- A valid JSON Schema object describing its parameters with `additionalProperties: false`.
 
-## Browser Security Rules
+## Browser Sandbox & Security Rules
 
-Plugin iframes use:
-
-```text
+Plugin iframes run with strict sandbox protection:
+```html
 sandbox="allow-scripts allow-forms"
 ```
+Asset responses are served with a per-plugin capability token and restrictive Content Security Policy (`CSP`). Form submission is permitted to support standard UI forms, with network containment enforced.
 
-Plugin asset responses also send a CSP sandbox:
+If plugin interactions fail with sandbox or iframe errors, inspect `server/src/plugin-service.ts` and `ui/src/components/PluginBrowser.tsx`.
 
-```text
-sandbox allow-scripts allow-forms
-```
+## Key Files to Inspect
 
-Both places must allow forms because many plugin UIs use normal HTML forms while still handling submission through JavaScript. If browser-created plugin actions fail with a sandbox form error, inspect `server/src/plugin-asset-policy.ts` and `app/src/components/PluginBrowser.tsx`.
+- Manifest specification and validators: `packages/plugin-sdk/src/index.ts`
+- Authoring rules and contract: `server/skills/dashboard-plugin-authoring/references/contract.md`
+- Backend host runtime: `server/src/plugin-host.ts`
+- Plugin discovery, review, and lifecycle: `server/src/plugin-service.ts`
+- Agent tool injection and execution: `server/extensions/dashboard-plugin-tools.ts`
+- Reference hosted plugin: `plugins/notes/`
 
-## Files To Inspect For Plugin Work
+## Verification & Acceptance
 
-Always start with:
-
-- `packages/plugin-sdk/src/index.ts`
-- `packages/plugin-sdk/README.md`
-- `server/skills/dashboard-plugin-authoring/references/contract.md`
-
-For hosted plugin work, inspect:
-
-- `server/src/plugin-host.ts`
-- `server/src/plugin-service.ts`
-- `server/extensions/dashboard-plugin-tools.ts`
-- `plugins/notes/plugin.json`
-- `plugins/notes/server.ts`
-- `plugins/notes/app.js`
-- `server/test/plugin-host.test.ts`
-- `server/test/shared-notes-migration.test.ts`
-- `server/test/plugin-service.test.ts`
-- `server/test/dashboard-plugin-tools.test.ts`
-
-## Acceptance Checks
-
-For plugin platform changes, prefer focused tests first:
-
-```powershell
-cd server
-npm test
-```
-
-Run `npm run build` from the workspace root to verify full TypeScript and Vite compilation.
+1. Verify TypeScript types and build: `npm run build` from the workspace root.
+2. Test installation, upgrade, rollback, and removal through the Dashboard Plugins UI.
+3. Verify tool availability and access restrictions with Pi chat when read/write grants are toggled.

@@ -48,7 +48,7 @@ Pi-Dashboards/
 │   ├── skills/        # Built-in agent lookup skills
 │   └── templates/     # Clean starter project templates (MEMORY.md)
 ├── ui/                # React + Vite frontend application
-├── packages/          # Shared plugin-sdk and plugin-runtime
+├── packages/          # Shared plugin-sdk
 └── scripts/           # Platform launch and build scripts
 ```
 

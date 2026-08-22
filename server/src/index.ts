@@ -15,7 +15,7 @@ import { GitService } from './git-service.js'
 import { OnboardingError, OnboardingService } from './onboarding-service.js'
 import { PiRpcProcess } from './pi-rpc.js'
 import { pluginAssetContentSecurityPolicy } from './plugin-asset-policy.js'
-import { PluginRuntimeError, proxyPluginRuntime } from './plugin-runtime-proxy.js'
+import { PluginHostError } from './plugin-host.js'
 import { PluginError, PluginService } from './plugin-service.js'
 import { NativeTerminalSession } from './terminal-session.js'
 import { ProviderLoginSession } from './provider-login-session.js'
@@ -680,24 +680,20 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
   const pluginRuntimeMatch = url.pathname.match(/^\/api\/plugins\/([^/]+)\/runtime(?:\/(.*))?$/)
   if (pluginRuntimeMatch) {
     const pluginId = decodeURIComponent(pluginRuntimeMatch[1])
-    const runtime = plugins.runtime(pluginId)
+    plugins.runtime(pluginId)
     const runtimePath = `/${pluginRuntimeMatch[2] ?? ''}`
-    if (runtime.protocol === 'host-module') {
-      let body: unknown = undefined
-      if (request.method !== 'GET' && request.method !== 'HEAD') {
-        body = await readJsonBody(request).catch(() => undefined)
-      }
-      const result = await plugins.pluginHost.handleRequest(pluginId, {
-        method: (request.method ?? 'GET') as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
-        path: runtimePath,
-        query: url.searchParams,
-        headers: request.headers as Record<string, string | string[] | undefined>,
-        body,
-      })
-      hostedPluginResponse(response, result.status ?? 200, result.body, result.headers)
-    } else {
-      await proxyPluginRuntime(request, response, { pluginId, socketPath: runtime.socketPath, path: `${runtimePath}${url.search}` })
+    let body: unknown = undefined
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      body = await readJsonBody(request).catch(() => undefined)
     }
+    const result = await plugins.pluginHost.handleRequest(pluginId, {
+      method: (request.method ?? 'GET') as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+      path: runtimePath,
+      query: url.searchParams,
+      headers: request.headers as Record<string, string | string[] | undefined>,
+      body,
+    })
+    hostedPluginResponse(response, result.status ?? 200, result.body, result.headers)
     record({ category: 'system', type: 'plugin_runtime_request', severity: 'info', summary: `${request.method ?? 'GET'} request to plugin ${pluginId}`, sessionId: currentSessionId, data: { pluginId, method: request.method ?? 'GET' } })
     return
   }
@@ -1251,7 +1247,7 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
 const server = createServer((request, response) => {
   void handleHttp(request, response).catch((error) => {
     const message = error instanceof Error ? error.message : 'Request failed'
-    const status = error instanceof FileAccessError || error instanceof SkillError || error instanceof SystemError || error instanceof PluginError || error instanceof PluginRuntimeError || error instanceof OnboardingError || error instanceof WorkerError ? error.status : 500
+    const status = error instanceof FileAccessError || error instanceof SkillError || error instanceof SystemError || error instanceof PluginError || error instanceof PluginHostError || error instanceof OnboardingError || error instanceof WorkerError ? error.status : 500
     if (status >= 500) record({ category: 'error', type: 'http_error', severity: 'error', summary: message, sessionId: currentSessionId })
     if (!response.headersSent) json(response, status, { error: message })
     else response.end()

@@ -14,7 +14,6 @@ import {
   type PluginPermission,
 } from '../../packages/plugin-sdk/src/index.js'
 import { processGroupOptions, terminateProcess } from './process-control.js'
-import { PluginRuntimeError, probePluginRuntime } from './plugin-runtime-proxy.js'
 import { PluginHost } from './plugin-host.js'
 
 const BUNDLED_PLUGIN_PERMISSIONS: PluginPermission[] = ['plugin-data:read', 'plugin-data:write', 'dashboard-theme:read', 'dashboard-notifications:write']
@@ -137,9 +136,6 @@ function parseManifest(raw: unknown, options: { expectedId?: string; bundled?: b
     requireDashboardVersion: options.requireDashboardVersion,
   })
   if (!result.success) throw new PluginError(result.errors[0] ?? 'Plugin manifest is invalid')
-  if (options.hostedRepository && result.manifest.entry.backend?.protocol === 'http-unix-v1') {
-    throw new PluginError('Repository plugins must use the hosted backend runtime', 409)
-  }
   return result.manifest
 }
 
@@ -396,15 +392,7 @@ export class PluginService {
   private async detailed(summary: PluginSummary): Promise<PluginSummary> {
     let runtimeStatus: PluginSummary['runtimeStatus'] = summary.backend ? 'disabled' : 'not-applicable'
     if (summary.backend && summary.enabled) {
-      const installedPlugin = this.installed.get(summary.id)
-      if (installedPlugin?.manifest.entry.backend?.protocol === 'host-module') {
-        runtimeStatus = this.pluginHost.isLoaded(summary.id) ? 'healthy' : 'unavailable'
-      } else {
-        try {
-          await probePluginRuntime({ pluginId: summary.id, version: summary.version, socketPath: this.runtimeSocketPath(summary.id) })
-          runtimeStatus = 'healthy'
-        } catch (error) { runtimeStatus = error instanceof PluginRuntimeError && error.status === 409 ? 'version-mismatch' : 'unavailable' }
-      }
+      runtimeStatus = this.pluginHost.isLoaded(summary.id) ? 'healthy' : 'unavailable'
     }
     return { ...summary, runtimeStatus, storageBytes: await this.storageBytes(summary.id) }
   }
@@ -419,19 +407,12 @@ export class PluginService {
     const plugin = this.installed.get(id)
     if (!plugin) throw new PluginError('Plugin not found', 404)
     if (enabled && plugin.manifest.entry.backend) {
-      if (plugin.manifest.entry.backend.protocol === 'host-module') {
-        try {
-          await this.loadHostedPlugin(plugin)
-        } catch (error) {
-          throw new PluginError(`Failed to load plugin backend: ${error instanceof Error ? error.message : String(error)}`, 409)
-        }
-      } else {
-        if (plugin.source !== 'bundled' || !this.options.runtimeSocketRoot) throw new PluginError('Plugin backend runtime is unavailable', 409)
-        try {
-          await probePluginRuntime({ pluginId: id, version: plugin.manifest.version, socketPath: this.runtimeSocketPath(id) })
-        } catch { throw new PluginError('Start the matching plugin service before enabling this plugin', 409) }
+      try {
+        await this.loadHostedPlugin(plugin)
+      } catch (error) {
+        throw new PluginError(`Failed to load plugin backend: ${error instanceof Error ? error.message : String(error)}`, 409)
       }
-    } else if (!enabled && plugin.manifest.entry.backend?.protocol === 'host-module') {
+    } else if (!enabled && plugin.manifest.entry.backend) {
       this.pluginHost.unloadPlugin(id)
     }
     this.registry.enabled[id] = enabled
@@ -717,12 +698,11 @@ export class PluginService {
     await this.pluginHost.loadPlugin(plugin.directory, plugin.manifest)
   }
 
-  runtime(id: string): { socketPath: string; permissions: PluginPermission[]; protocol: PluginBackendProtocol } {
+  runtime(id: string): { permissions: PluginPermission[]; protocol: PluginBackendProtocol } {
     const plugin = this.installed.get(id)
     if (!plugin || this.registry.enabled[id] !== true) throw new PluginError('Plugin not found or disabled', 404)
     if (!plugin.manifest.entry.backend) throw new PluginError('Plugin does not have a backend runtime', 404)
     return {
-      socketPath: this.runtimeSocketPath(id),
       permissions: [...plugin.manifest.permissions],
       protocol: plugin.manifest.entry.backend.protocol,
     }

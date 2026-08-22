@@ -1,7 +1,6 @@
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
-import { request as httpRequest } from 'node:http'
 import { readFile, readdir, stat } from 'node:fs/promises'
-import { homedir, tmpdir } from 'node:os'
+import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import {
   KNOWN_PLUGIN_PERMISSIONS,
@@ -9,16 +8,15 @@ import {
   type PluginAgentToolV1,
   type PluginManifestV1,
 } from '../../packages/plugin-sdk/src/index.js'
+import { PluginHost } from '../src/plugin-host.js'
 
 const bundledRoot = process.env.PI_DASHBOARD_PLUGIN_CODE_ROOT ?? resolve(process.cwd(), '../plugins')
 const stateRoot = process.env.PI_DASHBOARD_PLUGIN_STATE_ROOT ?? resolve(homedir(), '.pi/agent/dashboard/plugins')
-const socketRoot = process.env.PI_DASHBOARD_PLUGIN_RUNTIME_SOCKET_ROOT ?? resolve(tmpdir(), 'pi-dashboard-plugins')
 const authoringSkillPath = process.env.PI_DASHBOARD_PLUGIN_AUTHORING_SKILL_PATH ?? join(process.cwd(), 'skills/dashboard-plugin-authoring')
 const referenceSkillPath = process.env.PI_DASHBOARD_REFERENCE_SKILL_PATH ?? join(process.cwd(), 'skills/dashboard-reference')
 const workerReadOnly = process.env.PI_DASHBOARD_WORKER_MODE === 'research' || process.env.PI_DASHBOARD_WORKER_MODE === 'review'
-const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
-const TIMEOUT_MS = 10_000
 const installedRoot = join(stateRoot, 'installed')
+const pluginHost = new PluginHost(stateRoot)
 
 interface Registry {
   schemaVersion: 1
@@ -46,7 +44,7 @@ async function registry(): Promise<Registry> {
   }
 }
 
-async function discoverRoot(root: string, source: 'bundled' | 'repository'): Promise<RuntimePlugin[]> {
+async function discoverRoot(root: string, _source: 'bundled' | 'repository'): Promise<RuntimePlugin[]> {
   let entries
   try { entries = await readdir(root, { withFileTypes: true }) } catch { return [] }
   const results: RuntimePlugin[] = []
@@ -61,7 +59,6 @@ async function discoverRoot(root: string, source: 'bundled' | 'repository'): Pro
         allowAgent: true,
         supportedPermissions: KNOWN_PLUGIN_PERMISSIONS,
       })
-      if (result.success && source === 'repository' && result.manifest.entry.backend?.protocol === 'http-unix-v1') continue
       if (result.success && result.manifest.agent) {
         const skillFiles = await Promise.all((result.manifest.agent.skills ?? []).map((skill) =>
           stat(join(directory, skill.path, 'SKILL.md')).catch(() => undefined)))
@@ -78,59 +75,21 @@ async function manifests(): Promise<RuntimePlugin[]> {
   return [...await discoverRoot(bundledRoot, 'bundled'), ...await discoverRoot(installedRoot, 'repository')]
 }
 
-import { PluginHost } from '../src/plugin-host.js'
-
-const pluginHost = new PluginHost(stateRoot)
-
 async function invoke(plugin: RuntimePlugin, tool: PluginAgentToolV1, parameters: Record<string, unknown>): Promise<{ status: number; body: unknown }> {
   const manifest = plugin.manifest
-  if (manifest.entry.backend?.protocol === 'host-module') {
-    if (!pluginHost.isLoaded(manifest.id)) {
-      await pluginHost.loadPlugin(plugin.directory, manifest)
-    }
-    const result = await pluginHost.handleRequest(manifest.id, {
-      method: tool.method,
-      path: tool.path,
-      query: tool.method === 'GET' ? new URLSearchParams(Object.entries(parameters).map(([k, v]) => [k, String(v)] as [string, string])) : undefined,
-      body: tool.method === 'GET' ? undefined : parameters,
-    })
-    return { status: result.status ?? 200, body: result.body }
+  if (!manifest.entry.backend) {
+    throw new Error(`Plugin ${manifest.id} does not provide a backend runtime`)
   }
-
-  const query = tool.method === 'GET'
-    ? new URLSearchParams(Object.entries(parameters).map(([key, value]) => [key, String(value)] as [string, string])).toString()
-    : ''
-  const body = tool.method === 'GET' ? Buffer.alloc(0) : Buffer.from(JSON.stringify(parameters))
-  const path = `${tool.path}${query ? `?${query}` : ''}`
-  return new Promise((resolve, reject) => {
-    const request = httpRequest({
-      socketPath: join(socketRoot, manifest.id, `${manifest.id}.sock`),
-      method: tool.method,
-      path,
-      headers: {
-        'x-pi-dashboard-plugin-id': manifest.id,
-        'content-type': 'application/json',
-      },
-    }, (response) => {
-      const chunks: Buffer[] = []
-      let size = 0
-      response.on('data', (chunk: Buffer) => {
-        size += chunk.length
-        if (size <= MAX_RESPONSE_BYTES) chunks.push(chunk)
-      })
-      response.on('end', () => {
-        const raw = Buffer.concat(chunks).toString('utf8')
-        try {
-          resolve({ status: response.statusCode ?? 200, body: JSON.parse(raw || '{}') as unknown })
-        } catch {
-          resolve({ status: response.statusCode ?? 200, body: raw })
-        }
-      })
-    })
-    request.setTimeout(TIMEOUT_MS, () => request.destroy(new Error('Plugin request timed out')))
-    request.once('error', reject)
-    request.end(body)
+  if (!pluginHost.isLoaded(manifest.id)) {
+    await pluginHost.loadPlugin(plugin.directory, manifest)
+  }
+  const result = await pluginHost.handleRequest(manifest.id, {
+    method: tool.method,
+    path: tool.path,
+    query: tool.method === 'GET' ? new URLSearchParams(Object.entries(parameters).map(([k, v]) => [k, String(v)] as [string, string])) : undefined,
+    body: tool.method === 'GET' ? undefined : parameters,
   })
+  return { status: result.status ?? 200, body: result.body }
 }
 
 export default async function dashboardPluginTools(pi: ExtensionAPI) {

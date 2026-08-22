@@ -79,18 +79,14 @@ export function satisfiesPluginDashboardVersion(version: string, range: string):
   })
 }
 
-export type PluginBackendProtocol = 'http-unix-v1' | 'host-module'
-
-export interface PluginManifestBackendHttpUnixV1 {
-  protocol: 'http-unix-v1'
-}
+export type PluginBackendProtocol = 'host-module'
 
 export interface PluginManifestBackendHostModuleV1 {
   protocol: 'host-module'
   module: string
 }
 
-export type PluginManifestBackendV1 = PluginManifestBackendHttpUnixV1 | PluginManifestBackendHostModuleV1
+export type PluginManifestBackendV1 = PluginManifestBackendHostModuleV1
 
 export interface PluginManifestV1 {
   schemaVersion: 1
@@ -266,9 +262,7 @@ export function validatePluginManifest(raw: unknown, options: PluginManifestVali
       errors.push('Plugin manifest entry.backend protocol is invalid')
     } else {
       const backendObj = backend as Record<string, unknown>
-      if (backendObj.protocol === 'http-unix-v1') {
-        normalizedBackend = { protocol: 'http-unix-v1' }
-      } else if (backendObj.protocol === 'host-module') {
+      if (backendObj.protocol === 'host-module') {
         const rawModule = backendObj.module === undefined ? 'server.ts' : backendObj.module
         if (!isSafePluginPath(rawModule)) {
           errors.push('Plugin manifest entry.backend.module must be a safe relative path')
@@ -276,7 +270,7 @@ export function validatePluginManifest(raw: unknown, options: PluginManifestVali
           normalizedBackend = { protocol: 'host-module', module: rawModule }
         }
       } else {
-        errors.push('Plugin manifest entry.backend protocol is invalid')
+        errors.push('Plugin manifest entry.backend protocol is invalid (must be "host-module")')
       }
     }
   }

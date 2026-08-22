@@ -13,42 +13,68 @@ Read [references/contract.md](references/contract.md) completely. It contains th
 
 Then inspect only the files routed by that reference. Open another Dashboard file only when a named integration point is insufficient, and explain why.
 
-## 2. Classify before changing files
+## 2. Decision Rule & Classification
 
-Choose exactly one path:
+Before changing any files, choose the exact path:
 
-- **Trusted static install:** The supplied repository already is a compatible Dashboard plugin and the user explicitly trusts its code. Do not rebuild it. Review the exact commit through the Plugins page and let the user approve installation.
-- **Static workspace authoring:** The plugin is interface-only and needs no Pi tools, hosted server logic, or durable shared state. Build a standalone Git repository inside the current project workspace under `plugins/<plugin-id>` for `workspace:plugins/<plugin-id>` review.
-- **Local machine authoring:** Build a plugin in the user's private local plugins directory `~/.pi/agent/plugins/<plugin-id>` for `local:<plugin-id>` review.
-- **Hosted agent-connected authoring:** Pi must read or change plugin data, or the plugin needs durable shared state/server logic. Build a trusted plugin with a hosted backend module and plugin-private storage. Never imply that unreviewed code can gain backend or Pi access.
+### ⚠️ Critical Decision Rule
+- **Default for User / Workspace Plugins:** When the user asks to build, test, or install a plugin (static or agent-connected), **ALWAYS** create a standalone Git repository inside the active project workspace at `plugins/<plugin-id>`, commit the files, and provide the exact source identifier: `workspace:plugins/<plugin-id>`.
+- **Bundled First-Party Plugins:** **ONLY** place files directly in Dashboard's repository `plugins/<plugin-id>` directory if the user specifically asked to create a first-party plugin distributed with the Dashboard codebase itself.
 
-If a GitHub repository or website is only an example, reproduce the useful behavior without copying branding, copyrighted assets, secrets, analytics, or unrelated dependencies.
+### Authoring Paths:
+1. **Static Workspace Plugin:** Browser-only UI, visualization, calculator, or dashboard tool.
+   - Location: Active workspace at `plugins/<plugin-id>`.
+   - Manifest: `entry.frontend` (e.g. `index.html`), `permissions: []`, no `entry.backend`, no `agent`.
+   - Install identifier: `workspace:plugins/<plugin-id>`.
+2. **Hosted Agent-Connected Workspace Plugin:** Server logic, persistent storage, or Pi agent tools/skills.
+   - Location: Active workspace at `plugins/<plugin-id>`.
+   - Manifest: `entry.frontend`, `entry.backend` (`protocol: "host-module"`, `module: "server.ts"`), optional `agent.tools` (`/agent/*`), optional `agent.skills`, permissions.
+   - Install identifier: `workspace:plugins/<plugin-id>`.
+3. **Local Machine Plugin:**
+   - Location: User local plugins directory `~/.pi/agent/plugins/<plugin-id>`.
+   - Install identifier: `local:<plugin-id>`.
+4. **Bundled First-Party Plugin:**
+   - Location: Dashboard repository root `plugins/<plugin-id>`.
+   - Discovered automatically at server startup.
+
+If a GitHub repository or website is provided as an example, reproduce the useful behavior cleanly without copying external branding, copyrighted assets, secrets, telemetry, or unrelated dependencies.
 
 ## 3. Implement the smallest complete slice
 
 Before editing, state the chosen path and the files you expect to touch.
 
-**Critical Path & Security Rules:**
+**Critical Path & Git Repository Rules:**
 * Workspace plugin repositories must reside strictly within the project workspace at `plugins/<plugin-id>`.
-* Never attempt or instruct relative path escapes with `..` (e.g. `workspace:../...`); the Dashboard enforces strict path boundary containment for security.
-* Initialize the plugin directory with `git init` and an initial commit (`git commit`) so exact commit hashing and digest verification succeed.
+* Never attempt relative path escapes with `..` (e.g. `workspace:../...`); the Dashboard enforces strict path boundary containment for security.
+* You **MUST** initialize the plugin directory as a standalone Git repository and create an initial commit:
+  ```bash
+  cd plugins/<plugin-id>
+  git init
+  git add -A
+  git commit -m "feat: initial plugin commit"
+  ```
+  Dashboard reviews committed `HEAD` files and calculates a cryptographic SHA256 digest during installation. Uncommitted files cannot be reviewed.
 
-Keep Dashboard enablement separate from Pi read/write grants. Give each agent operation a narrow `/agent/*` tool and classify it honestly as `read` or `write`. Display-only plugins such as games must not request agent access.
+**Security & Permissions:**
+* Keep Dashboard enablement separate from Pi read/write grants. Give each agent operation a narrow `/agent/*` route and classify it honestly as `read` or `write`.
+* Display-only plugins must not request agent tools or permissions.
+* Do not add credentials, execute repository install/build scripts during review, weaken iframe isolation, expose host operating system primitives, add external network access without a requirement, or redesign the plugin platform.
+* Do not commit the main Dashboard repository unless the user explicitly asks. Only commit inside the nested plugin repository `plugins/<plugin-id>`.
 
-Do not add credentials, execute repository install/build scripts during review, weaken iframe isolation, mount broad Dashboard state, expose host operating system primitives, add network access without a demonstrated requirement, or redesign the plugin platform.
+## 4. Verify and Hand Off
 
-Do not commit the main Dashboard repository or push anything unless the user explicitly asks. A new standalone static plugin may receive the local Git commit required for exact-commit review; report that commit clearly.
+Follow the acceptance checks in [references/contract.md](references/contract.md). Test the interface and, if agent tools are present, verify tool behavior with Pi read/write grants disabled and enabled.
 
-## 4. Verify and hand off
-
-Run the routed tests in the contract. Also test the user-visible interface and, when present, every Pi read/write tool through chat with grants disabled and enabled.
-
-Finish with:
-
-- what was built or reviewed;
-- where it lives (`plugins/<plugin-id>` inside the workspace or `~/.pi/agent/plugins/<plugin-id>`);
-- what Pi can and cannot access;
-- tests performed and any untested boundary;
-- for static workspace plugins, the exact `workspace:plugins/<plugin-id>` to enter in Plugins;
-- for local plugins, the exact `local:<plugin-id>` to enter in Plugins;
-- for hosted authoring, the rebuild/restart and Plugins-page activation steps.
+### Required Authoring Handoff Checklist:
+Every plugin delivery must include:
+1. **Package Location:** Exact path to the plugin folder (e.g. `<workspace>/plugins/<plugin-id>`).
+2. **Plugin ID & Version:** Declared in `plugin.json`.
+3. **Exact Source Identifier:** For workspace plugins, `workspace:plugins/<plugin-id>`; for local plugins, `local:<plugin-id>`.
+4. **Exact Git Commit Hash:** Pinned commit hash from `git rev-parse HEAD`.
+5. **Review & Installation Instructions:**
+   - Navigate to **Plugins** → **Add plugin**.
+   - Enter the source identifier under *Install a repository as-is*.
+   - Click **Review repository**, inspect the files and digest, check *Trust this repository*, and click **Install plugin**.
+6. **Restart Requirements:** Explicitly state: **"No Dashboard restart or rebuild required."**
+7. **Pi Access Grant Instructions:** Explain how to enable the plugin in the UI and how to grant Pi **Read** or **Write** access if agent tools/skills are included.
+8. **Tests Performed:** Summary of verified functionality and any untested boundaries.
