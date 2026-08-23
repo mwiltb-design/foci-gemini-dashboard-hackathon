@@ -6,34 +6,34 @@ Pi Dashboard 2.0 is a modern, native desktop application (built with Electron, R
 
 The desktop build includes:
 
-- Chat (Multi-Model AI pairing with streaming diffs)
-- Files and file editing (CodeMirror syntax-highlighted editor)
-- Native Terminal (PowerShell / Bash pseudo-terminal via `node-pty`)
-- Sessions & Session Branching
-- Skills and Tools
-- Sub-Agent Workers (Background coordination)
-- Sandboxed Project Manager (`~/Pi-Dashboards/`)
-- Plugins (Local runtime & domain custom tool suites)
-- Remote Connectivity (In-app Tailscale Serve manager)
-- Settings & Windows Desktop Shortcut Creator
+- **Chat**: Multi-Model AI pairing with streaming diffs (Claude, GPT, Gemini, Ollama, OpenRouter).
+- **Files & Editor**: In-browser CodeMirror syntax-highlighted editor with line numbers and live saving.
+- **Native Terminal**: PowerShell / Bash pseudo-terminal via `node-pty`.
+- **App Previewer**: Live web app & HTML responsive iframe preview canvas with Desktop, Tablet, and Mobile viewports.
+- **Sessions**: Complete session history, compaction, and branching.
+- **Skills & Tools**: Extensible agent capabilities and documentations.
+- **Autonomous Workers**: Background delegation suite (**Sub-PI**, **Google Antigravity CLI**, **OpenAI Codex CLI**, and **Anthropic Claude CLI**) with 2-level markdown routing rules (`WORKERS.md` and `rules/*.md`).
+- **Sandboxed Project Manager**: Sandboxed workspaces under `~/Pi-Dashboards/`.
+- **Plugins**: Local runtime & custom tool suites (Developer, Business, Research).
+- **Remote Connectivity**: In-app Tailscale Serve manager.
+- **Settings & Experience Stacks**: One-click presets (**`★ User / Basic`**, **`⚡ Developer`**, and **`🏢 Business`**) with granular feature checkboxes.
 
 ## Main Processes
 
 - `Electron Shell` (`electron/main.cjs`): native desktop window lifecycle and multi-instance port resolution.
-- `Dashboard Backend` (`server/src/index.ts`): Node.js service managing Pi RPC, project files, sessions, skills, tools, and remote access. Bound strictly to `127.0.0.1:4317`.
+- `Dashboard Backend` (`server/src/index.ts`): Node.js service managing Pi RPC, project files, sessions, skills, tools, workers, preview tunneling, and remote access. Bound strictly to `127.0.0.1:4317`.
 - `Dashboard UI` (`ui/src/`): React + Vite frontend bound strictly to `127.0.0.1:5173`. Proxies `/api`, `/ws`, and `/plugin-assets` to the backend.
 
-The backend stores private Dashboard state in `~/.pi-dashboard/` and provider credentials in `~/.pi/agent/`. Sandboxed user projects live in `~/Pi-Dashboards/<project>`.
+The backend stores private Dashboard state in `~/.pi-dashboard/` (including worker configs and rules in `~/.pi-dashboard/workers/`) and provider credentials in `~/.pi/agent/`. Sandboxed user projects live in `~/Pi-Dashboards/<project>`.
 
-## Feature Model
+## Feature & Stack Model
 
-The backend controls visible features through `PI_DASHBOARD_PROFILE` and `PI_DASHBOARD_ADDONS`.
+The dashboard provides dynamic, in-app stack presets and feature toggling:
 
-- Primary shared build: `PI_DASHBOARD_PROFILE=core`
-- Expected add-ons: `PI_DASHBOARD_ADDONS=terminal,workers`
-- Historical full workbench: `PI_DASHBOARD_PROFILE=workbench`
-
-Disabled features should be hidden in the UI and rejected by backend routes.
+- **User / Basic Stack**: Core features + Terminal + Sub-PI solo worker.
+- **Developer Stack**: User Stack + Multi-Provider Workers (Antigravity & Codex) + Rules Editor + Live App Previewer.
+- **Business Stack**: Developer Stack + Claude CLI + Automated Tasks / Cron + Enterprise MCPs.
+- **Custom Mode**: Any individual feature or worker provider can be toggled on/off at will in Settings.
 
 ## How Pi Should Use Dashboard Knowledge
 

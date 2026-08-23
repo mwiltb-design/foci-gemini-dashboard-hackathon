@@ -7,11 +7,14 @@ A modern, native desktop dashboard and agent execution environment for the [Pi C
 ## ✨ Features
 
 * **🖥️ 100% Native Desktop App:** Runs directly on Windows, macOS, and Linux without requiring Docker or virtual machines.
-* **🔒 Clean Workspace Isolation:** Keeps user project folders completely clean, storing internal skills, documentation, and metadata in private background app storage.
+* **🔒 Clean Workspace Isolation & Confinement:** Strict sandbox enforcement ensures all worker edits and artifacts stay confined within the active project workspace.
 * **💬 Intelligent Multi-Model Chat:** Streaming conversations with Claude, GPT, OpenRouter, Gemini, and local Ollama models with visual diff rendering and branch history.
 * **📁 Built-in File Explorer & Code Editor:** Syntax-highlighted code editing with CodeMirror, line numbers, and live file saving.
-* **⚡ Native Windows Terminal:** Embedded pseudo-terminal powered by `node-pty` for direct PowerShell, CMD, or Git Bash execution.
-* **🤖 Sub-Agent Worker Delegation:** Background coordinator for parallel research, code reviews, and implementation tasks.
+* **⚡ Native Terminal:** Embedded pseudo-terminal powered by `node-pty` for direct PowerShell, CMD, or Git Bash execution.
+* **🤖 Multi-Provider Worker Delegation:** Autonomous background worker suite supporting **Sub-PI**, **Google Antigravity CLI**, **OpenAI Codex CLI**, and **Anthropic Claude CLI** with dynamic bounds (turns, timeouts, output limits).
+* **📜 2-Level Markdown Rule System:** Global router matrix (`WORKERS.md`) and per-provider guidelines (`rules/*.md`) editable directly inside the in-app dual-pane editor.
+* **◫ Live Web & HTML App Previewer:** Integrated iframe canvas for previewing local workspace `.html` files or tunneling live local dev servers (Vite `:5173`, React `:3000`, etc.) with responsive Desktop, Tablet, and Mobile device frames.
+* **🎛️ Experience Stacks & Feature Checklists:** One-click presets for **`★ User / Basic`**, **`⚡ Developer`**, and **`🏢 Business`** with instant in-app feature and worker toggles.
 * **🔌 Modular Plugin Architecture:** Interchangeable dashboards and tool suites tailored for Developers, Businesses, and Researchers.
 * **🚀 5-Step Guided Onboarding:** Custom display name, optional `USER.md` / `MEMORY.md` import, provider authentication, and feature toggles.
 

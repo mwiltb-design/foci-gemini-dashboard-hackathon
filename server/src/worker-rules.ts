@@ -47,6 +47,14 @@ When deciding which worker to assign for a task, follow these guidelines:
 - **Strengths**: General-purpose isolated Pi sub-agent, plugin authoring, exploration without polluting main session history.
 - **Supported Modes**: \`research\`, \`review\`, \`implement\`.
 - **Default Recommendation**: Best for self-contained tasks, testing plugins, or running alternative models within Pi's native ecosystem.
+
+## Core Rules & System Tools
+
+1. **Strict Workspace Confinement**: All created files, edits, and artifacts MUST be written directly inside the active project directory. Do not write to \`~/.gemini\`, \`~/.codex\`, or external temp folders.
+2. **Available System CLIs**: Workers inherit the host environment and may execute pre-installed tools when in \`implement\` mode:
+   - **GitHub CLI (\`gh\`)**: For checking PRs (\`gh pr diff\`), inspecting issues (\`gh issue view\`), and repository metadata.
+   - **ripgrep (\`rg\`)**: For lightning-fast regex search across the codebase.
+   - **uv / npm / bun**: For package management and running project validation tests.
 `
 
 const DEFAULT_ANTIGRAVITY_MD = `# Antigravity CLI Guidelines (Level 2)
