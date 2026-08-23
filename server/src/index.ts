@@ -1,11 +1,11 @@
 import { spawn } from 'node:child_process'
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { stat } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http'
 import { connect } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
-import { basename, dirname, resolve } from 'node:path'
+import { basename, dirname, extname, join, resolve } from 'node:path'
 import { WebSocket, WebSocketServer } from 'ws'
 import { ActivityStore, type ActivityCategory, type ActivitySeverity } from './activity-store.js'
 import { DashboardAuth } from './auth.js'
@@ -1333,6 +1333,53 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
       entries: entries.map((entry) => ({ ...entry, gitState: git.statusFor(entry.path, entry.type, gitStatus.entries) })),
       git: { available: gitStatus.available, clean: gitStatus.clean, branch: gitStatus.branch, commit: gitStatus.commit },
     })
+    return
+  }
+  const workspacePreviewMatch = url.pathname.match(/^\/api\/preview\/workspace\/(.+)$/)
+  if (workspacePreviewMatch) {
+    const rawRel = decodeURIComponent(workspacePreviewMatch[1])
+    try {
+      const safeRel = files.validateRelative(rawRel)
+      const fullPath = join(workspace, safeRel)
+      const fileBuffer = await readFile(fullPath)
+      const ext = extname(safeRel).toLowerCase()
+      const mimeMap: Record<string, string> = {
+        '.html': 'text/html; charset=utf-8',
+        '.htm': 'text/html; charset=utf-8',
+        '.css': 'text/css; charset=utf-8',
+        '.js': 'application/javascript; charset=utf-8',
+        '.mjs': 'application/javascript; charset=utf-8',
+        '.json': 'application/json; charset=utf-8',
+        '.svg': 'image/svg+xml',
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.ico': 'image/x-icon',
+        '.txt': 'text/plain; charset=utf-8',
+        '.md': 'text/plain; charset=utf-8',
+      }
+      const contentType = mimeMap[ext] || 'application/octet-stream'
+      response.writeHead(200, {
+        'Content-Type': contentType,
+        'Content-Length': fileBuffer.length,
+        'Cache-Control': 'no-cache',
+      })
+      response.end(fileBuffer)
+    } catch {
+      response.writeHead(404, { 'Content-Type': 'text/html; charset=utf-8' })
+      response.end(`<!DOCTYPE html><html><body style="font-family:sans-serif;padding:24px;background:#0d1117;color:#c9d1d9"><h2>File not found: ${rawRel}</h2><p>Make sure the file exists inside your project workspace.</p></body></html>`)
+    }
+    return
+  }
+
+  if (url.pathname === '/api/preview/html-files') {
+    const searchRes = await files.search('.html')
+    const htmlFiles = searchRes
+      .filter((item) => item.path.toLowerCase().endsWith('.html') || item.path.toLowerCase().endsWith('.htm'))
+      .map((item) => item.path)
+    json(response, 200, { files: htmlFiles })
     return
   }
   if (url.pathname === '/api/files/content') {
