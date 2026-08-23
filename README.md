@@ -1,4 +1,4 @@
-﻿<div align="center">
+<div align="center">
 
 # 🚀 Pi Dashboard
 ### Next-Generation Native Desktop Agent Workspace & Multi-Provider Coordinator
@@ -13,7 +13,7 @@
   <b>A powerful, privacy-first desktop environment orchestrating the Pi Coding Agent alongside Google Antigravity, OpenAI Codex, and Anthropic Claude.</b>
 </p>
 
-<img src="./docs/assets/preview.jpg" alt="Pi Dashboard Preview" width="100%" />
+<img src="./docs/assets/preview.png" alt="Pi Dashboard Preview" width="100%" />
 
 </div>
 
