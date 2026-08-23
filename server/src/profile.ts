@@ -1,11 +1,47 @@
-export const DASHBOARD_FEATURES = ['chat', 'files', 'files-editor', 'terminal', 'sessions', 'settings', 'skills', 'workers', 'plugins'] as const
+export const DASHBOARD_FEATURES = [
+  'chat',
+  'files',
+  'files-editor',
+  'terminal',
+  'sessions',
+  'settings',
+  'skills',
+  'workers',
+  'plugins',
+  'previewer',
+  'cron',
+] as const
+
 export type DashboardFeature = typeof DASHBOARD_FEATURES[number]
 export type DashboardProfileName = 'core' | 'workbench'
+export type DashboardStackPreset = 'basic' | 'developer' | 'business' | 'custom'
+
+export const ALWAYS_ENABLED_FEATURES: readonly DashboardFeature[] = [
+  'chat',
+  'files',
+  'files-editor',
+  'sessions',
+  'skills',
+  'settings',
+  'plugins',
+] as const
+
+export const OPTIONAL_FEATURES: readonly DashboardFeature[] = [
+  'terminal',
+  'workers',
+  'previewer',
+  'cron',
+] as const
+
+export const STACK_PRESETS: Record<Exclude<DashboardStackPreset, 'custom'>, DashboardFeature[]> = {
+  basic: ['chat', 'files', 'files-editor', 'sessions', 'skills', 'settings', 'plugins', 'terminal', 'workers'],
+  developer: ['chat', 'files', 'files-editor', 'sessions', 'skills', 'settings', 'plugins', 'terminal', 'workers', 'previewer'],
+  business: ['chat', 'files', 'files-editor', 'sessions', 'skills', 'settings', 'plugins', 'terminal', 'workers', 'previewer', 'cron'],
+}
 
 const CORE_FEATURES: DashboardFeature[] = ['chat', 'files', 'files-editor', 'sessions', 'skills', 'settings', 'plugins']
 const WORKBENCH_FEATURES: DashboardFeature[] = [...DASHBOARD_FEATURES]
-// Keep files-editor accepted for compatibility with existing installations where it was optional.
-const OPTIONAL_ADDONS: DashboardFeature[] = ['files-editor', 'terminal', 'workers']
+const OPTIONAL_ADDONS: DashboardFeature[] = ['files-editor', 'terminal', 'workers', 'previewer', 'cron']
 
 export interface DashboardProfile {
   name: DashboardProfileName

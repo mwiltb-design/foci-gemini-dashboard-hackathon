@@ -61,9 +61,14 @@ export interface WorkerProviderStatus {
   manageCommand?: string
 }
 
+export type DashboardStackPreset = 'basic' | 'developer' | 'business' | 'custom'
+
 export interface WorkerConfiguration {
   schemaVersion: 1
+  stackPreset?: DashboardStackPreset
+  enabledFeatures?: string[]
   providersEnabled: Record<string, boolean>
+  showRulesEditor?: boolean
   defaultBounds: WorkerBounds
   subPi?: {
     model?: { provider: string; id: string }

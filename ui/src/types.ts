@@ -5,6 +5,7 @@ export type ViewId =
   | 'sessions'
   | 'skills'
   | 'workers'
+  | 'previewer'
   | 'settings'
 
 export interface NavigationItem {

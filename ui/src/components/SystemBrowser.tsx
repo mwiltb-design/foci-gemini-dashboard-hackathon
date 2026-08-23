@@ -3,6 +3,7 @@ import { useSystemStatus, type AvailableModel, type SystemSnapshot } from '../ho
 import { Chip, Panel } from './Panel'
 import { RemoteAccessCard } from './RemoteAccessCard'
 import { ThemeSettingsCard } from './ThemeSettingsCard'
+import { StackFeatureSelectorCard } from './StackFeatureSelectorCard'
 
 function modelKey(provider?: string, id?: string): string {
   return provider && id ? `${provider}\u0000${id}` : ''
@@ -91,34 +92,7 @@ function Fact({ label, value, tone }: { label: string; value: string; tone?: 'ac
   return <div className="system-fact"><span>{label}</span><strong className={tone === 'accent' ? 'text-accent' : tone === 'warning' ? 'text-warning' : ''}>{value}</strong></div>
 }
 
-function OptionalCapabilities({ snapshot }: { snapshot: SystemSnapshot }) {
-  return <section className="system-section system-capabilities">
-    <header><div><span className="eyebrow">Optional capabilities</span><h2>Installed capability status</h2><p>Capabilities that change host services are reported here but remain managed through reviewed host setup.</p></div><Chip>{snapshot.backend.profile} profile</Chip></header>
-    <div className="system-capability-list">
-      {snapshot.backend.optionalCapabilities.map((capability) => <article className={`system-capability-card system-capability-card--${capability.status}`} key={capability.id}>
-        <header>
-          <div><strong>{capability.name}</strong><p>{capability.description}</p></div>
-          <Chip tone={capability.status === 'ready' ? 'accent' : 'warning'}>{capability.status}</Chip>
-        </header>
-        <div className="system-capability-facts">
-          <div><span>Dashboard access</span><strong>{capability.enabled ? 'Enabled' : 'Disabled'}</strong></div>
-          <div><span>Service</span><strong>{capability.statusLabel}</strong></div>
-          <div><span>Data behavior</span><strong>{capability.dataPolicy}</strong></div>
-          <div><span>Applying changes</span><strong>{capability.restartRequired ? 'Dashboard restart required' : 'No restart required'}</strong></div>
-        </div>
-        <div className="system-capability-actions">
-          {capability.status === 'ready' && <button className="button button--primary" type="button" onClick={() => { window.location.hash = capability.id === 'workers' ? '/workers' : '/terminal' }}>Open {capability.id === 'workers' ? 'Workers' : 'Terminal'}</button>}
-          <details>
-            <summary>{capability.enabled ? 'Change or disable on the host' : 'Enable on the host'}</summary>
-            <p>Run the feature helper from the Dashboard installation folder, choose the {capability.id === 'workers' ? 'Workers' : 'Terminal'} option, and approve the Dashboard restart. The browser does not edit private host configuration.</p>
-            <div><span>Windows</span><code>{capability.windowsCommand}</code></div>
-            <div><span>macOS / Linux</span><code>{capability.unixCommand}</code></div>
-          </details>
-        </div>
-      </article>)}
-    </div>
-  </section>
-}
+
 
 function CuratedMemorySettings({ memory, busy, onSave }: {
   memory: SystemSnapshot['backend']['curatedMemory']
@@ -285,7 +259,7 @@ function SystemContent({ snapshot, busy, onActive, onDefaults, onCuratedMemorySa
         />
       </div>
 
-      <OptionalCapabilities snapshot={snapshot} />
+      <StackFeatureSelectorCard />
 
       <ThemeSettingsCard />
 

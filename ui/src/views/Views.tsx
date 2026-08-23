@@ -1,4 +1,5 @@
 import { FormEvent, KeyboardEvent, useEffect, useState } from 'react'
+import { AppPreviewer } from '../components/AppPreviewer'
 import { ChatTimeline } from '../components/ChatTimeline'
 import { FileBrowser } from '../components/FileBrowser'
 import { Chip, Panel } from '../components/Panel'
@@ -118,6 +119,10 @@ export function SkillsView({ revision, plugins, onCreateWithPi }: {
 
 export function WorkersView({ onOpenSession }: { onOpenSession: (sessionId: string) => void }) {
   return <WorkersBrowser onOpenSession={sessionId => onOpenSession(sessionId)} />
+}
+
+export function PreviewerView() {
+  return <AppPreviewer />
 }
 
 export function SettingsView({ revision }: { revision: string }) {

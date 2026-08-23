@@ -1,4 +1,4 @@
-﻿import { FormEvent, useMemo, useState } from 'react'
+import { FormEvent, useMemo, useState } from 'react'
 import { Chip, Panel } from './Panel'
 import { useWorkers, type WorkerMode, type WorkerProvider, type WorkerRuleFile, type WorkerStatus } from '../hooks/useWorkers'
 import { useSystemStatus, type AvailableModel } from '../hooks/useSystemStatus'
@@ -157,25 +157,27 @@ export function WorkersBrowser({ onOpenSession }: { onOpenSession: (sessionId: s
             >
               Tasks & Queue
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('rules')
-                if (currentRule && !ruleEditorContent) setRuleEditorContent(currentRule.content)
-              }}
-              style={{
-                background: activeTab === 'rules' ? 'var(--accent, #63e6be)' : 'transparent',
-                color: activeTab === 'rules' ? '#000' : 'var(--muted)',
-                border: 'none',
-                padding: '4px 10px',
-                borderRadius: '4px',
-                fontSize: '11px',
-                fontWeight: activeTab === 'rules' ? 'bold' : 'normal',
-                cursor: 'pointer',
-              }}
-            >
-              Rules & Router (Markdown)
-            </button>
+            {workers.snapshot?.configuration?.showRulesEditor !== false && (
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('rules')
+                  if (currentRule && !ruleEditorContent) setRuleEditorContent(currentRule.content)
+                }}
+                style={{
+                  background: activeTab === 'rules' ? 'var(--accent, #63e6be)' : 'transparent',
+                  color: activeTab === 'rules' ? '#000' : 'var(--muted)',
+                  border: 'none',
+                  padding: '4px 10px',
+                  borderRadius: '4px',
+                  fontSize: '11px',
+                  fontWeight: activeTab === 'rules' ? 'bold' : 'normal',
+                  cursor: 'pointer',
+                }}
+              >
+                Rules & Router (Markdown)
+              </button>
+            )}
           </div>
           <Chip tone={active ? 'warning' : 'accent'}>{active ? '1 active' : 'ready'}</Chip>
         </div>

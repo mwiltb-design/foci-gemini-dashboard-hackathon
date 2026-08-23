@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { apiFetch } from '../api'
 
 export type WorkerMode = 'research' | 'review' | 'implement'
@@ -59,6 +59,7 @@ export interface WorkerTask {
 export interface WorkerConfiguration {
   schemaVersion: 1
   providersEnabled: Record<string, boolean>
+  showRulesEditor?: boolean
   defaultBounds: WorkerBounds
   subPi?: {
     model?: { provider: string; id: string }

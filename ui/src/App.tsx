@@ -17,13 +17,14 @@ import type { ViewId, ViewMeta } from './types'
 import {
   ChatView,
   FilesView,
+  PreviewerView,
   SessionsView,
   SettingsView,
   SkillsView,
   WorkersView,
 } from './views/Views'
 
-const viewIds = new Set<ViewId>(['chat', 'files', 'terminal', 'sessions', 'skills', 'workers', 'settings'])
+const viewIds = new Set<ViewId>(['chat', 'files', 'terminal', 'previewer', 'sessions', 'skills', 'workers', 'settings'])
 const TerminalView = lazy(() => import('./components/TerminalBrowser').then((module) => ({ default: module.TerminalBrowser })))
 
 function viewFromHash(): ViewId {
@@ -204,6 +205,8 @@ function DashboardApp({ config }: { config: DashboardConfig }) {
                         />
                       : view === 'settings'
                     ? <SettingsView revision={`${chat.connection}:${chat.state.model?.provider ?? ''}:${chat.state.model?.id ?? ''}:${chat.state.thinkingLevel ?? ''}:${chat.sessionsRevision}`} />
+                    : view === 'previewer'
+                      ? <PreviewerView />
                     : view === 'workers'
                       ? <WorkersView onOpenSession={(sessionId) => { if (chat.switchSession(sessionId)) navigate('chat') }} />
                     : ActiveView && <ActiveView />}

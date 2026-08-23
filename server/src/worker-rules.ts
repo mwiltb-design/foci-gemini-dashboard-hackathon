@@ -11,6 +11,8 @@ const DEFAULT_BOUNDS: WorkerBounds = {
 
 const DEFAULT_CONFIG: WorkerConfiguration = {
   schemaVersion: 1,
+  stackPreset: 'developer',
+  showRulesEditor: true,
   providersEnabled: {
     'sub-pi': true,
     'antigravity-cli': true,
@@ -151,6 +153,9 @@ export class WorkerRulesService {
       if (parsed?.schemaVersion === 1) {
         return {
           schemaVersion: 1,
+          stackPreset: parsed.stackPreset ?? DEFAULT_CONFIG.stackPreset,
+          enabledFeatures: parsed.enabledFeatures,
+          showRulesEditor: parsed.showRulesEditor ?? DEFAULT_CONFIG.showRulesEditor,
           providersEnabled: { ...DEFAULT_CONFIG.providersEnabled, ...(parsed.providersEnabled ?? {}) },
           defaultBounds: { ...DEFAULT_BOUNDS, ...(parsed.defaultBounds ?? {}) },
           ...(parsed.subPi ? { subPi: parsed.subPi } : {}),
@@ -166,6 +171,9 @@ export class WorkerRulesService {
     const current = await this.loadConfig()
     const merged: WorkerConfiguration = {
       schemaVersion: 1,
+      stackPreset: updates.stackPreset ?? current.stackPreset,
+      enabledFeatures: updates.enabledFeatures ?? current.enabledFeatures,
+      showRulesEditor: updates.showRulesEditor !== undefined ? updates.showRulesEditor : current.showRulesEditor,
       providersEnabled: { ...current.providersEnabled, ...(updates.providersEnabled ?? {}) },
       defaultBounds: { ...current.defaultBounds, ...(updates.defaultBounds ?? {}) },
       ...(updates.subPi ? { subPi: updates.subPi } : current.subPi ? { subPi: current.subPi } : {}),

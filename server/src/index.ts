@@ -20,7 +20,7 @@ import { PluginError, PluginService } from './plugin-service.js'
 import { NativeTerminalSession } from './terminal-session.js'
 import { ProviderLoginSession } from './provider-login-session.js'
 import { safePreviewHeaders } from './preview-policy.js'
-import { dashboardProfile, type DashboardFeature } from './profile.js'
+import { dashboardProfile, type DashboardFeature, ALWAYS_ENABLED_FEATURES, OPTIONAL_FEATURES, STACK_PRESETS, DASHBOARD_FEATURES, type DashboardStackPreset } from './profile.js'
 import { SessionArchiveService } from './session-archive.js'
 import { SessionCatalog } from './session-catalog.js'
 import { SkillError, SkillService } from './skill-service.js'
@@ -1032,6 +1032,60 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
     })
     record({ category: 'system', type: 'worker_task_started', severity: 'info', summary: `Started ${task.mode} task with ${task.providerName}`, sessionId: currentSessionId, data: { taskId: task.id, providerId: task.providerId, mode: task.mode } })
     json(response, 202, task)
+    return
+  }
+  if (request.method === 'GET' && url.pathname === '/api/system/features') {
+    const config = await workerRules.loadConfig()
+    json(response, 200, {
+      stackPreset: config.stackPreset ?? 'developer',
+      enabledFeatures: Array.from(enabledFeatures),
+      allFeatures: DASHBOARD_FEATURES,
+      alwaysEnabledFeatures: ALWAYS_ENABLED_FEATURES,
+      optionalFeatures: OPTIONAL_FEATURES,
+      stackPresets: STACK_PRESETS,
+      providersEnabled: config.providersEnabled,
+      showRulesEditor: config.showRulesEditor ?? true,
+    })
+    return
+  }
+  if (request.method === 'POST' && url.pathname === '/api/system/features') {
+    const body = (await readJsonBody(request)) as {
+      stackPreset?: DashboardStackPreset
+      features?: DashboardFeature[]
+      providersEnabled?: Record<string, boolean>
+      showRulesEditor?: boolean
+    }
+    const nextFeatures = new Set<DashboardFeature>(ALWAYS_ENABLED_FEATURES)
+    if (Array.isArray(body.features)) {
+      for (const f of body.features) {
+        if ((DASHBOARD_FEATURES as readonly string[]).includes(f)) nextFeatures.add(f as DashboardFeature)
+      }
+    }
+    enabledFeatures.clear()
+    for (const f of nextFeatures) enabledFeatures.add(f)
+    profile.features = Array.from(enabledFeatures)
+
+    const updatedConfig = await workerRules.updateConfig({
+      stackPreset: body.stackPreset,
+      enabledFeatures: Array.from(enabledFeatures),
+      providersEnabled: body.providersEnabled,
+      showRulesEditor: body.showRulesEditor,
+    })
+
+    record({
+      category: 'system',
+      type: 'system_features_updated',
+      severity: 'info',
+      summary: `Updated dashboard stack to ${body.stackPreset ?? 'custom'} (${profile.features.length} features active)`,
+      sessionId: currentSessionId,
+    })
+    broadcast({ type: 'workspace_changed' })
+    json(response, 200, {
+      stackPreset: updatedConfig.stackPreset,
+      enabledFeatures: Array.from(enabledFeatures),
+      providersEnabled: updatedConfig.providersEnabled,
+      showRulesEditor: updatedConfig.showRulesEditor,
+    })
     return
   }
   if (request.method === 'POST' && url.pathname === '/api/workers/config') {
