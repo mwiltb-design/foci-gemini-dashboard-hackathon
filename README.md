@@ -82,4 +82,4 @@ You can securely access your Pi Dashboard from your phone, iPad, or remote lapto
 ---
 
 ## 📜 License
-MIT License. Created by [mwiltb-design](https://github.com/mwiltb-design).
+GNU General Public License v3.0 (GPLv3). Created by [mwiltb-design](https://github.com/mwiltb-design).
