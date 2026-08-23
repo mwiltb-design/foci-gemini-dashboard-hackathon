@@ -1,22 +1,64 @@
-# 🚀 Pi-Dashboards 2.0 (Desktop Edition)
+﻿<div align="center">
 
-A modern, native desktop dashboard and agent execution environment for the [Pi Coding Agent](https://github.com/earendil-works/pi). Built with Electron, React, Node.js, and TypeScript.
+# 🚀 Pi Dashboard
+### Next-Generation Native Desktop Agent Workspace & Multi-Provider Coordinator
+
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-2ea44f)]()
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178c6)]()
+[![Electron](https://img.shields.io/badge/Electron-Desktop-47848f)]()
+[![React](https://img.shields.io/badge/React-18-61dafb)]()
+
+<p align="center">
+  <b>A powerful, privacy-first desktop environment orchestrating the Pi Coding Agent alongside Google Antigravity, OpenAI Codex, and Anthropic Claude.</b>
+</p>
+
+<img src="./docs/assets/preview.jpg" alt="Pi Dashboard Preview" width="100%" />
+
+</div>
 
 ---
 
-## ✨ Features
+## ✨ Key Features
 
-* **🖥️ 100% Native Desktop App:** Runs directly on Windows, macOS, and Linux without requiring Docker or virtual machines.
-* **🔒 Clean Workspace Isolation & Confinement:** Strict sandbox enforcement ensures all worker edits and artifacts stay confined within the active project workspace.
-* **💬 Intelligent Multi-Model Chat:** Streaming conversations with Claude, GPT, OpenRouter, Gemini, and local Ollama models with visual diff rendering and branch history.
-* **📁 Built-in File Explorer & Code Editor:** Syntax-highlighted code editing with CodeMirror, line numbers, and live file saving.
-* **⚡ Native Terminal:** Embedded pseudo-terminal powered by `node-pty` for direct PowerShell, CMD, or Git Bash execution.
-* **🤖 Multi-Provider Worker Delegation:** Autonomous background worker suite supporting **Sub-PI**, **Google Antigravity CLI**, **OpenAI Codex CLI**, and **Anthropic Claude CLI** with dynamic bounds (turns, timeouts, output limits).
-* **📜 2-Level Markdown Rule System:** Global router matrix (`WORKERS.md`) and per-provider guidelines (`rules/*.md`) editable directly inside the in-app dual-pane editor.
-* **◫ Live Web & HTML App Previewer:** Integrated iframe canvas for previewing local workspace `.html` files or tunneling live local dev servers (Vite `:5173`, React `:3000`, etc.) with responsive Desktop, Tablet, and Mobile device frames.
-* **🎛️ Experience Stacks & Feature Checklists:** One-click presets for **`★ User / Basic`**, **`⚡ Developer`**, and **`🏢 Business`** with instant in-app feature and worker toggles.
-* **🔌 Modular Plugin Architecture:** Interchangeable dashboards and tool suites tailored for Developers, Businesses, and Researchers.
-* **🚀 5-Step Guided Onboarding:** Custom display name, optional `USER.md` / `MEMORY.md` import, provider authentication, and feature toggles.
+### 🤖 Autonomous Multi-Provider Worker Suite
+* **Native CLI Adapters**: Direct execution integration with **Sub-PI**, **Google Antigravity CLI** (`agy`), **OpenAI Codex CLI** (`codex`), and **Anthropic Claude CLI** (`claude`).
+* **Dynamic Bounds**: Custom sliders for turn limits (1–32), timeouts (1–60m), and result payload limits.
+* **Embedded CLI Console**: Built-in terminal session for running account authentication (`codex login`, `claude login`, `agy`) and tool discovery.
+
+### 📜 2-Level Markdown Rules & Router
+* **Level 1 Delegation Router (`WORKERS.md`)**: Defines provider specializations, routing guidelines, and available host tools (`gh`, `rg`, `uv`, `npm`).
+* **Level 2 Provider Rules (`rules/*.md`)**: Tailored operational instructions for each model provider, editable in real-time in the in-app dual-pane editor.
+
+### ◫ Live Web & HTML App Previewer
+* **Workspace HTML Discovery**: Automatic dropdown and direct static file serving (`/api/preview/workspace/*`) for testing local `.html` files without running external servers.
+* **Local Dev Server Tunneling**: Instant preview presets for Vite (`:5173`), Next/React (`:3000`), Local (`:8080`), and custom ports with live hot-reloading.
+* **Responsive Viewport Frames**: Test layouts across **🖥 Desktop (Full Width)**, **📱 Tablet (768px with bezel)**, and **📲 Mobile (375px phone frame)**.
+
+### 🎛️ Modular Experience Stacks & Feature Checklists
+* **One-Click Presets**:
+  * **`★ User / Basic`**: Clean and focused. Core chat, file browser, terminal, and Sub-PI solo worker.
+  * **`⚡ Developer`**: Full-stack dev mode. Multi-agent CLIs (Antigravity & Codex), Markdown Rules editor, and App Previewer.
+  * **`🏢 Business`**: Advanced automations, Claude CLI, and scheduled background tasks.
+* **Granular Feature Checklists**: Check or uncheck any individual feature or worker provider in Settings with instant live saving.
+
+### 💬 Intelligent Multi-Model Chat
+* Streaming conversations with Claude, GPT, OpenRouter, Gemini, and local Ollama models.
+* Real-time visual code diffs, interactive branch trees, and session compaction.
+
+### 📁 File Explorer & Syntax-Highlighted Editor
+* Clean file browser with CodeMirror syntax highlighting, line numbers, and live file saving.
+* Preserves git state indicators (modified, added, untracked) for all workspace files.
+
+### ⚡ Native Terminal with PTY Bridge
+* Embedded pseudo-terminal powered by `node-pty`.
+* Direct PowerShell, Command Prompt, or Git Bash execution with full ANSI color support.
+
+### 🔒 Strict Workspace Confinement
+* Enforces that all generated files, edits, and worker artifacts remain confined within your active project workspace.
+
+### 🌐 Private Remote Pairing with Tailscale Serve
+* Control your dashboard securely from your phone, tablet, or remote laptop over your encrypted Tailnet (`https://<machine>.tailnet.ts.net:8443`) with custom password authentication.
 
 ---
 
@@ -30,7 +72,7 @@ A modern, native desktop dashboard and agent execution environment for the [Pi C
 
 ```powershell
 # Clone the repository
-git clone https://github.com/mwiltb-design/pi-dashboard-2.0.git Pi-Dashboards
+git clone https://github.com/mwiltb-design/pi-dashboard.git Pi-Dashboards
 cd Pi-Dashboards
 
 # Launch developer desktop environment (auto-installs dependencies)
@@ -49,37 +91,27 @@ Pi-Dashboards/
 ├── server/            # Backend API, RPC process runner & PTY bridge
 │   ├── docs/          # Built-in documentation (abilities, limits, shortcuts)
 │   ├── skills/        # Built-in agent lookup skills
+│   ├── src/           # Adapters for Sub-PI, Antigravity, Codex, and Claude
 │   └── templates/     # Clean starter project templates (MEMORY.md)
 ├── ui/                # React + Vite frontend application
+│   ├── src/components # Previewer, Worker Console, Stack Selector, Editor
+│   └── src/views      # Dashboard view routing
 ├── packages/          # Shared plugin-sdk
 └── scripts/           # Platform launch and build scripts
 ```
 
 ---
 
-## 🔒 Private Remote Access with Tailscale Serve
-
-You can securely access your Pi Dashboard from your phone, iPad, or remote laptop over your private Tailnet without exposing any ports to the public internet:
-
-1. Open **Settings** in the dashboard and find **"Remote Connectivity & Tailscale Serve"**.
-2. Check **"Enable Tailscale Serve Remote Access"**.
-3. Enter your Tailnet hostname (e.g. `my-pc.tailnet.ts.net`) and set your custom password.
-4. Click **"💾 Save & Protect"**.
-5. Run the generated command in PowerShell on your host computer:
-   ```powershell
-   tailscale serve --bg --https=8443 http://127.0.0.1:5173
-   ```
-6. Visit `https://my-pc.tailnet.ts.net:8443` on your mobile browser, enter your password, and control your dashboard remotely!
-
----
-
-## ⚙️ Configuration & Ports
+## ⚙️ Configuration & Zero Collisions
 
 * **Default Ports:** UI on `127.0.0.1:5173` and Backend on `127.0.0.1:4317`.
 * **Zero Collisions:** Multi-window instances dynamically hunt the next open ports (`5174`, `4318`, etc.).
-* **Zero File Editing:** Configure your settings, projects, and Tailscale password directly in the dashboard UI.
+* **Zero Manual File Editing:** Configure your settings, experience stacks, worker rules, and Tailscale password directly in the dashboard UI.
 
 ---
 
 ## 📜 License
-GNU General Public License v3.0 (GPLv3). Created by [mwiltb-design](https://github.com/mwiltb-design).
+
+This project is licensed under the **GNU General Public License v3.0 (GPLv3)**. See the [LICENSE](./LICENSE) file for details.
+
+Created with ❤️ by [mwiltb-design](https://github.com/mwiltb-design).
