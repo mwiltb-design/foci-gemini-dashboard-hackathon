@@ -895,8 +895,8 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .worker-history p { display: -webkit-box; margin: 6px 0; overflow: hidden; color: var(--muted); font-size: 10px; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .worker-history small { color: var(--blue); font: 10px 'JetBrains Mono', monospace; }
 .workers-archive-meta { margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.4; }
-.workers-archive-meta code { color: var(--accent, #63e6be); font-family: 'JetBrains Mono', monospace; font-size: 9.5px; background: rgba(99, 230, 190, 0.08); padding: 1px 4px; border-radius: 4px; word-break: break-all; }
-.workers-archive-meta small { color: var(--blue, #70a5fd); font-size: 10px; }
+.workers-archive-meta code { color: var(--blue); font: 9.5px/1.4 'JetBrains Mono', monospace; background: rgba(112, 165, 253, 0.08); padding: 1px 4px; border-radius: 4px; word-break: break-all; }
+.workers-archive-meta small { color: var(--blue); font: 10px 'JetBrains Mono', monospace; }
 .worker-history-subtabs { display: flex; border-bottom: 1px solid var(--line); background: #0c1015; }
 .worker-history-subtab { flex: 1; padding: 7px 10px; background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--muted); font-size: 11px; font-weight: 500; cursor: pointer; text-align: center; transition: all 0.15s ease; }
 .worker-history-subtab:hover { color: var(--text); background: rgba(255, 255, 255, 0.02); }
