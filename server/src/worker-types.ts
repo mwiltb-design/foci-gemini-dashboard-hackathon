@@ -46,6 +46,7 @@ export interface WorkerTask {
   thinkingLevel?: string
   changedFiles: WorkerChangedFile[]
   resultEnvelope?: WorkerResultEnvelope
+  archived?: boolean
 }
 
 export interface WorkerProviderStatus {

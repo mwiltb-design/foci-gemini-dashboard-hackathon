@@ -92,6 +92,7 @@ try { mkdirSync(defaultCustomPluginRoot, { recursive: true }) } catch {}
 const pluginLocalRepositoryRoot = process.env.PI_DASHBOARD_PLUGIN_LOCAL_REPOSITORY_ROOT ?? defaultCustomPluginRoot
 const terminalSocketPath = process.env.PI_DASHBOARD_TERMINAL_SOCKET ?? resolve(tmpdir(), `pi-terminal-${workspaceKey}/terminal.sock`)
 let workerStorePath = process.env.PI_DASHBOARD_WORKER_STORE_PATH ?? resolve(projectDataDir, 'worker-tasks.json')
+let workerArchivePath = process.env.PI_DASHBOARD_WORKER_ARCHIVE_PATH ?? resolve(projectDataDir, 'worker-tasks-archive.json')
 const remoteAccess = new RemoteAccessService()
 const allowedOrigins = new Set(
   (process.env.PI_DASHBOARD_ALLOWED_ORIGINS ?? 'http://localhost:5173,http://127.0.0.1:5173,http://localhost:5190,http://127.0.0.1:5190,http://localhost:5184,http://127.0.0.1:5184')
@@ -170,6 +171,7 @@ let claudeWorker = new ClaudeWorkerAdapter({
 })
 let workers = new WorkerCoordinator({
   storePath: workerStorePath,
+  archivePath: workerArchivePath,
   adapters: [subPi, antigravityWorker, codexWorker, claudeWorker],
   rulesService: workerRules,
   bounds: workerBounds,
@@ -312,6 +314,7 @@ async function switchActiveWorkspace(targetWorkspace: string): Promise<{ workspa
   sessionArchivePath = resolve(projectDataDir, 'sessions-archive.json')
   pluginStateRoot = resolve(projectDataDir, 'plugin-data')
   workerStorePath = resolve(projectDataDir, 'worker-tasks.json')
+  workerArchivePath = resolve(projectDataDir, 'worker-tasks-archive.json')
   pluginRuntimeSocketRoot = resolve(tmpdir(), `pi-plugins-${workspaceKey}`)
 
   sessions = new SessionCatalog(sessionRoot, workspace)
@@ -351,6 +354,7 @@ async function switchActiveWorkspace(targetWorkspace: string): Promise<{ workspa
   })
   workers = new WorkerCoordinator({
     storePath: workerStorePath,
+    archivePath: workerArchivePath,
     adapters: [subPi, antigravityWorker, codexWorker, claudeWorker],
     rulesService: workerRules,
     bounds: workerBounds,
@@ -1111,6 +1115,27 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
     json(response, 200, task)
     return
   }
+  if (request.method === 'POST' && url.pathname === '/api/workers/archive') {
+    const body = (await readJsonBody(request)) as { taskId?: string; allCompleted?: boolean }
+    if (body.allCompleted) {
+      const count = await workers.archiveAllCompleted()
+      record({ category: 'system', type: 'worker_tasks_archived', severity: 'info', summary: `Archived ${count} completed worker tasks`, sessionId: currentSessionId })
+    } else if (body.taskId) {
+      await workers.archiveTask(body.taskId)
+      record({ category: 'system', type: 'worker_task_archived', severity: 'info', summary: `Archived worker task`, sessionId: currentSessionId, data: { taskId: body.taskId } })
+    }
+    json(response, 200, await workers.snapshot())
+    return
+  }
+  if (request.method === 'POST' && url.pathname === '/api/workers/archive/restore') {
+    const body = (await readJsonBody(request)) as { taskId?: string }
+    if (body.taskId) {
+      await workers.restoreTask(body.taskId)
+      record({ category: 'system', type: 'worker_task_restored', severity: 'info', summary: `Restored worker task from archive`, sessionId: currentSessionId, data: { taskId: body.taskId } })
+    }
+    json(response, 200, await workers.snapshot())
+    return
+  }
 
   if (request.method === 'POST' && url.pathname === '/api/projects/create') {
     const body = await readJsonBody(request)
@@ -1294,6 +1319,14 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
   }
   if (url.pathname === '/api/workers') {
     json(response, 200, await workers.snapshot())
+    return
+  }
+  if (url.pathname === '/api/workers/archive') {
+    json(response, 200, {
+      tasks: workers.getArchivedTasks(),
+      archivedCount: workers.archivedCount,
+      archivePath: workers.archivePath,
+    })
     return
   }
   if (url.pathname === '/api/workers/rules') {

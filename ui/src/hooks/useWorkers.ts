@@ -54,6 +54,7 @@ export interface WorkerTask {
   thinkingLevel?: string
   changedFiles: Array<{ path: string; state: string }>
   resultEnvelope?: WorkerResultEnvelope
+  archived?: boolean
 }
 
 export interface WorkerConfiguration {
@@ -81,6 +82,8 @@ export interface WorkerSnapshot {
   providers: WorkerProvider[]
   activeTaskId?: string
   tasks: WorkerTask[]
+  archivedCount: number
+  archivePath: string
   configuration: WorkerConfiguration
   rules: WorkerRuleFile[]
 }
@@ -201,6 +204,73 @@ export function useWorkers() {
     }
   }
 
+  async function archiveTask(taskId: string): Promise<boolean> {
+    setBusy(true)
+    try {
+      const next = await request<WorkerSnapshot>('/api/workers/archive', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ taskId }),
+      })
+      setSnapshot(next)
+      setError('')
+      return true
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to archive worker task')
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function archiveAllCompleted(): Promise<boolean> {
+    setBusy(true)
+    try {
+      const next = await request<WorkerSnapshot>('/api/workers/archive', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ allCompleted: true }),
+      })
+      setSnapshot(next)
+      setError('')
+      return true
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to archive completed tasks')
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function restoreTask(taskId: string): Promise<boolean> {
+    setBusy(true)
+    try {
+      const next = await request<WorkerSnapshot>('/api/workers/archive/restore', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ taskId }),
+      })
+      setSnapshot(next)
+      setSelectedId(taskId)
+      setError('')
+      return true
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to restore worker task')
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function loadArchivedTasks(): Promise<WorkerTask[]> {
+    try {
+      const res = await request<{ tasks: WorkerTask[] }>('/api/workers/archive')
+      return res.tasks ?? []
+    } catch {
+      return []
+    }
+  }
+
   return {
     snapshot,
     selected: snapshot?.tasks.find((task) => task.id === selectedId),
@@ -213,6 +283,10 @@ export function useWorkers() {
     cancel,
     updateConfig,
     saveRule,
+    archiveTask,
+    archiveAllCompleted,
+    restoreTask,
+    loadArchivedTasks,
     refresh,
   }
 }

@@ -1,6 +1,6 @@
 import { FormEvent, useMemo, useState } from 'react'
 import { Chip, Panel } from './Panel'
-import { useWorkers, type WorkerMode, type WorkerProvider, type WorkerRuleFile, type WorkerStatus } from '../hooks/useWorkers'
+import { useWorkers, type WorkerMode, type WorkerProvider, type WorkerRuleFile, type WorkerStatus, type WorkerTask } from '../hooks/useWorkers'
 import { useSystemStatus, type AvailableModel } from '../hooks/useSystemStatus'
 import { WorkerConsole, type WorkerConsoleMode } from './WorkerConsole'
 
@@ -51,6 +51,44 @@ export function WorkersBrowser({ onOpenSession }: { onOpenSession: (sessionId: s
   const [selectedRuleId, setSelectedRuleId] = useState<string>('workers-router')
   const [ruleEditorContent, setRuleEditorContent] = useState<string>('')
   const [ruleSaveStatus, setRuleSaveStatus] = useState<string>('')
+
+  // Queue and archive subtab state
+  const [queueTab, setQueueTab] = useState<'active' | 'archived'>('active')
+  const [archivedTasks, setArchivedTasks] = useState<WorkerTask[]>([])
+  const [loadingArchived, setLoadingArchived] = useState(false)
+
+  async function handleSwitchToArchive() {
+    setQueueTab('archived')
+    setLoadingArchived(true)
+    const list = await workers.loadArchivedTasks()
+    setArchivedTasks(list)
+    setLoadingArchived(false)
+    if (list.length > 0 && !list.some((t) => t.id === workers.selectedId)) {
+      workers.setSelectedId(list[0].id)
+    }
+  }
+
+  function handleSwitchToActive() {
+    setQueueTab('active')
+    if (workers.snapshot?.tasks.length && !workers.snapshot.tasks.some((t) => t.id === workers.selectedId)) {
+      workers.setSelectedId(workers.snapshot.tasks[0].id)
+    }
+  }
+
+  async function handleArchiveAllCompleted() {
+    await workers.archiveAllCompleted()
+    if (queueTab === 'archived') {
+      const list = await workers.loadArchivedTasks()
+      setArchivedTasks(list)
+    }
+  }
+
+  async function handleRestoreTask(taskId: string) {
+    await workers.restoreTask(taskId)
+    const list = await workers.loadArchivedTasks()
+    setArchivedTasks(list)
+    setQueueTab('active')
+  }
 
   const active = Boolean(workers.snapshot?.activeTaskId)
   const providers = workers.snapshot?.providers ?? []
@@ -462,109 +500,229 @@ export function WorkersBrowser({ onOpenSession }: { onOpenSession: (sessionId: s
             {workers.error && <div className="form-error">{workers.error}</div>}
 
             {/* History and Detail Panes */}
-            <div className="worker-workspace">
-              <aside className="worker-history">
-                <header>
-                  <span className="eyebrow">Shared queue & history</span>
-                  <button type="button" onClick={workers.refresh}>↻</button>
-                </header>
-                {workers.loading ? (
-                  <div className="worker-empty">Loading tasks…</div>
-                ) : workers.snapshot?.tasks.length ? (
-                  workers.snapshot.tasks.map((task) => (
-                    <button
-                      className={workers.selectedId === task.id ? 'is-selected' : ''}
-                      type="button"
-                      key={task.id}
-                      onClick={() => workers.setSelectedId(task.id)}
-                    >
-                      <div>
-                        <strong>{task.providerName}</strong>
-                        <Chip tone={statusTone(task.status)}>{task.status}</Chip>
-                      </div>
-                      <p>{task.prompt}</p>
-                      <small>{task.mode} · {time(task.createdAt)}</small>
-                    </button>
-                  ))
-                ) : (
-                  <div className="worker-empty">No worker tasks yet.</div>
-                )}
-              </aside>
+            {(() => {
+              const selectedTask = workers.snapshot?.tasks.find((task) => task.id === workers.selectedId) ?? archivedTasks.find((task) => task.id === workers.selectedId)
+              const hasCompletedTasks = (workers.snapshot?.tasks ?? []).some((t) => t.status !== 'running' && t.status !== 'queued')
 
-              <section className="worker-detail">
-                {!workers.selected ? (
-                  <div className="worker-empty">Select a task to inspect its bounded result and saved session.</div>
-                ) : (
-                  <>
+              return (
+                <div className="worker-workspace">
+                  <aside className="worker-history">
                     <header>
                       <div>
-                        <span className="eyebrow">Task detail</span>
-                        <h2>{workers.selected.providerName} · {workers.selected.mode}</h2>
-                        <p>{workers.selected.prompt}</p>
+                        <span className="eyebrow">Shared queue & history</span>
+                        <div className="workers-archive-meta">
+                          <span>Archive storage: <code>{workers.snapshot?.archivePath ?? 'worker-tasks-archive.json'}</code></span>
+                          {Boolean(workers.snapshot?.archivedCount) && (
+                            <small> · {workers.snapshot?.archivedCount} archived</small>
+                          )}
+                        </div>
                       </div>
-                      <Chip tone={statusTone(workers.selected.status)}>{workers.selected.status}</Chip>
+                      <button type="button" onClick={() => { workers.refresh(); if (queueTab === 'archived') void handleSwitchToArchive(); }} title="Refresh tasks">↻</button>
                     </header>
-                    <div className="worker-progress">
-                      <div><span>Progress</span><strong>{workers.selected.progress}</strong></div>
-                      <div><span>Turns</span><strong>{workers.selected.turns} / {workers.selected.bounds.turnLimit}</strong></div>
-                      <div><span>Started</span><strong>{time(workers.selected.startedAt)}</strong></div>
+
+                    <div className="worker-history-subtabs">
+                      <button
+                        type="button"
+                        className={`worker-history-subtab ${queueTab === 'active' ? 'is-active' : ''}`}
+                        onClick={handleSwitchToActive}
+                      >
+                        Active ({workers.snapshot?.tasks.length ?? 0}/15)
+                      </button>
+                      <button
+                        type="button"
+                        className={`worker-history-subtab ${queueTab === 'archived' ? 'is-active' : ''}`}
+                        onClick={handleSwitchToArchive}
+                      >
+                        📦 Archive ({workers.snapshot?.archivedCount ?? 0})
+                      </button>
                     </div>
-                    {(workers.selected.status === 'running' || workers.selected.status === 'queued') && (
-                      <div className="worker-running-actions">
-                        <button className="button button--stop" type="button" disabled={workers.busy} onClick={() => void workers.cancel(workers.selected!.id)}>
-                          Cancel task
+
+                    {queueTab === 'active' && hasCompletedTasks && (
+                      <div className="worker-history-actionbar">
+                        <button
+                          type="button"
+                          className="button button--quiet"
+                          style={{ width: '100%', fontSize: '11px', padding: '4px 8px' }}
+                          onClick={handleArchiveAllCompleted}
+                          disabled={workers.busy}
+                        >
+                          📦 Archive Completed Tasks
                         </button>
                       </div>
                     )}
-                    {workers.selected.error && <div className="worker-error">{workers.selected.error}</div>}
 
-                    {/* Result Envelope */}
-                    {workers.selected.resultEnvelope?.actionsTaken?.length ? (
-                      <section className="worker-actions" style={{ padding: '8px 12px', background: 'rgba(99, 230, 190, 0.05)', borderRadius: '6px', border: '1px solid var(--line)', marginBottom: '8px' }}>
-                        <span className="eyebrow" style={{ color: 'var(--accent)' }}>Actions Taken</span>
-                        <ul style={{ margin: '4px 0 0', paddingLeft: '18px', fontSize: '11px' }}>
-                          {workers.selected.resultEnvelope.actionsTaken.map((action, idx) => (
-                            <li key={idx}>{action}</li>
-                          ))}
-                        </ul>
-                      </section>
-                    ) : null}
-
-                    <section className="worker-result">
-                      <span className="eyebrow">Bounded result</span>
-                      <pre>{workers.selected.result ?? 'Result will appear when the worker finishes.'}</pre>
-                      {workers.selected.resultTruncated && <small>The Dashboard truncated this result. Inspect the saved session for full details.</small>}
-                    </section>
-
-                    <section className="worker-files">
-                      <span className="eyebrow">Changed files detected</span>
-                      {workers.selected.changedFiles.length ? (
-                        <ul>
-                          {workers.selected.changedFiles.map((file) => (
-                            <li key={file.path}>
-                              <code>{file.path}</code>
-                              <span>{file.state}</span>
-                            </li>
-                          ))}
-                        </ul>
+                    {queueTab === 'active' ? (
+                      workers.loading ? (
+                        <div className="worker-empty">Loading tasks…</div>
+                      ) : workers.snapshot?.tasks.length ? (
+                        workers.snapshot.tasks.map((task) => (
+                          <button
+                            className={workers.selectedId === task.id ? 'is-selected' : ''}
+                            type="button"
+                            key={task.id}
+                            onClick={() => workers.setSelectedId(task.id)}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                              <strong>{task.providerName}</strong>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <Chip tone={statusTone(task.status)}>{task.status}</Chip>
+                                {task.status !== 'running' && task.status !== 'queued' && (
+                                  <span
+                                    role="button"
+                                    className="task-mini-archive-btn"
+                                    title="Archive this task"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      void workers.archiveTask(task.id)
+                                    }}
+                                  >
+                                    📦
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <p>{task.prompt}</p>
+                            <small>{task.mode} · {time(task.createdAt)}</small>
+                          </button>
+                        ))
                       ) : (
-                        <p>No changed files were detected for this task.</p>
-                      )}
-                    </section>
-
-                    <footer>
-                      {workers.selected.sessionId ? (
-                        <button className="button button--quiet" type="button" onClick={() => onOpenSession(workers.selected!.sessionId!)}>
-                          Open saved Sub PI session ↗
-                        </button>
+                        <div className="worker-empty">No active worker tasks.</div>
+                      )
+                    ) : (
+                      loadingArchived ? (
+                        <div className="worker-empty">Loading archived tasks…</div>
+                      ) : archivedTasks.length ? (
+                        archivedTasks.map((task) => (
+                          <button
+                            className={workers.selectedId === task.id ? 'is-selected' : ''}
+                            type="button"
+                            key={task.id}
+                            onClick={() => workers.setSelectedId(task.id)}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                              <strong>{task.providerName}</strong>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <Chip tone="neutral">archived</Chip>
+                                <span
+                                  role="button"
+                                  className="task-mini-archive-btn"
+                                  title="Restore to active queue"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    void handleRestoreTask(task.id)
+                                  }}
+                                >
+                                  ↺
+                                </span>
+                              </div>
+                            </div>
+                            <p>{task.prompt}</p>
+                            <small>{task.mode} · {time(task.createdAt)}</small>
+                          </button>
+                        ))
                       ) : (
-                        <span>Native CLI execution complete.</span>
-                      )}
-                    </footer>
-                  </>
-                )}
-              </section>
-            </div>
+                        <div className="worker-empty">No archived tasks found.</div>
+                      )
+                    )}
+                  </aside>
+
+                  <section className="worker-detail">
+                    {!selectedTask ? (
+                      <div className="worker-empty">Select a task to inspect its bounded result and saved session.</div>
+                    ) : (
+                      <>
+                        {selectedTask.archived && (
+                          <div className="worker-archive-banner">
+                            <span>📦 This task is archived.</span>
+                            <button className="button button--small button--quiet" type="button" onClick={() => void handleRestoreTask(selectedTask.id)}>
+                              ↺ Restore to Active Queue
+                            </button>
+                          </div>
+                        )}
+                        <header>
+                          <div>
+                            <span className="eyebrow">Task detail</span>
+                            <h2>{selectedTask.providerName} · {selectedTask.mode}</h2>
+                            <p>{selectedTask.prompt}</p>
+                          </div>
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <Chip tone={statusTone(selectedTask.status)}>{selectedTask.status}</Chip>
+                            {!selectedTask.archived && selectedTask.status !== 'running' && selectedTask.status !== 'queued' && (
+                              <button
+                                className="button button--quiet"
+                                style={{ fontSize: '10px', padding: '3px 7px' }}
+                                type="button"
+                                onClick={() => void workers.archiveTask(selectedTask.id)}
+                                title="Move this task to archive"
+                              >
+                                📦 Archive
+                              </button>
+                            )}
+                          </div>
+                        </header>
+                        <div className="worker-progress">
+                          <div><span>Progress</span><strong>{selectedTask.progress}</strong></div>
+                          <div><span>Turns</span><strong>{selectedTask.turns} / {selectedTask.bounds.turnLimit}</strong></div>
+                          <div><span>Started</span><strong>{time(selectedTask.startedAt)}</strong></div>
+                        </div>
+                        {(selectedTask.status === 'running' || selectedTask.status === 'queued') && (
+                          <div className="worker-running-actions">
+                            <button className="button button--stop" type="button" disabled={workers.busy} onClick={() => void workers.cancel(selectedTask.id)}>
+                              Cancel task
+                            </button>
+                          </div>
+                        )}
+                        {selectedTask.error && <div className="worker-error">{selectedTask.error}</div>}
+
+                        {/* Result Envelope */}
+                        {selectedTask.resultEnvelope?.actionsTaken?.length ? (
+                          <section className="worker-actions" style={{ padding: '8px 12px', background: 'rgba(99, 230, 190, 0.05)', borderRadius: '6px', border: '1px solid var(--line)', marginBottom: '8px' }}>
+                            <span className="eyebrow" style={{ color: 'var(--accent)' }}>Actions Taken</span>
+                            <ul style={{ margin: '4px 0 0', paddingLeft: '18px', fontSize: '11px' }}>
+                              {selectedTask.resultEnvelope.actionsTaken.map((action: string, idx: number) => (
+                                <li key={idx}>{action}</li>
+                              ))}
+                            </ul>
+                          </section>
+                        ) : null}
+
+                        <section className="worker-result">
+                          <span className="eyebrow">Bounded result</span>
+                          <pre>{selectedTask.result ?? 'Result will appear when the worker finishes.'}</pre>
+                          {selectedTask.resultTruncated && <small>The Dashboard truncated this result. Inspect the saved session for full details.</small>}
+                        </section>
+
+                        <section className="worker-files">
+                          <span className="eyebrow">Changed files detected</span>
+                          {selectedTask.changedFiles.length ? (
+                            <ul>
+                              {selectedTask.changedFiles.map((file: { path: string; state: string }) => (
+                                <li key={file.path}>
+                                  <code>{file.path}</code>
+                                  <span>{file.state}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p>No changed files were detected for this task.</p>
+                          )}
+                        </section>
+
+                        <footer>
+                          {selectedTask.sessionId ? (
+                            <button className="button button--quiet" type="button" onClick={() => onOpenSession(selectedTask.sessionId!)}>
+                              Open saved Sub PI session ↗
+                            </button>
+                          ) : (
+                            <span>Native CLI execution complete.</span>
+                          )}
+                        </footer>
+                      </>
+                    )}
+                  </section>
+                </div>
+              )
+            })()}
           </section>
         ) : (
           /* Tab 2: Rules & Router (Markdown Editor) */

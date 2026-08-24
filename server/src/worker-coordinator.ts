@@ -5,7 +5,8 @@ import { randomUUID } from 'node:crypto'
 import { WORKER_MODES, type WorkerAdapter, type WorkerBounds, type WorkerConfiguration, type WorkerMode, type WorkerProviderStatus, type WorkerRuleFile, type WorkerTask } from './worker-types.js'
 import type { WorkerRulesService } from './worker-rules.js'
 
-const MAX_TASKS = 100
+const ACTIVE_TASK_LIMIT = 15
+const MAX_ARCHIVE_TASKS = 500
 const MAX_PROMPT_LENGTH = 12_000
 
 interface WorkerStore {
@@ -21,6 +22,7 @@ export class WorkerError extends Error {
 
 export interface WorkerCoordinatorOptions {
   storePath: string
+  archivePath: string
   adapters: WorkerAdapter[]
   rulesService: WorkerRulesService
   bounds: WorkerBounds
@@ -29,6 +31,7 @@ export interface WorkerCoordinatorOptions {
 
 export class WorkerCoordinator extends EventEmitter {
   private tasks: WorkerTask[] = []
+  private archivedTasks: WorkerTask[] = []
   private activeTaskId?: string
   private activeAdapter?: WorkerAdapter
   private timer?: NodeJS.Timeout
@@ -40,30 +43,58 @@ export class WorkerCoordinator extends EventEmitter {
 
   async initialize(): Promise<void> {
     await this.options.rulesService.initialize()
+
+    // 1. Load active tasks
     try {
       const parsed = JSON.parse(await readFile(this.options.storePath, 'utf8')) as WorkerStore
-      if (parsed?.schemaVersion !== 1 || !Array.isArray(parsed.tasks)) throw new Error('invalid worker store')
-      const now = new Date().toISOString()
-      this.tasks = parsed.tasks.slice(0, MAX_TASKS).map((task) =>
-        task.status === 'queued' || task.status === 'running'
-          ? { ...task, status: 'failed', progress: 'Interrupted by a Dashboard restart.', error: 'Dashboard restarted before this task finished.', updatedAt: now, finishedAt: now }
-          : task)
-      await this.save()
+      if (parsed?.schemaVersion === 1 && Array.isArray(parsed.tasks)) {
+        const now = new Date().toISOString()
+        this.tasks = parsed.tasks.map((task) =>
+          task.status === 'queued' || task.status === 'running'
+            ? { ...task, status: 'failed', progress: 'Interrupted by a Dashboard restart.', error: 'Dashboard restarted before this task finished.', updatedAt: now, finishedAt: now }
+            : task)
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         this.tasks = []
       }
     }
+
+    // 2. Load archived tasks
+    try {
+      const parsedArchive = JSON.parse(await readFile(this.options.archivePath, 'utf8')) as WorkerStore
+      if (parsedArchive?.schemaVersion === 1 && Array.isArray(parsedArchive.tasks)) {
+        this.archivedTasks = parsedArchive.tasks.map((t) => ({ ...t, archived: true }))
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        this.archivedTasks = []
+      }
+    }
+
+    // 3. Enforce 15 task retention rule
+    this.enforceRetentionLimit()
+    await this.save()
   }
 
   getAdapter(providerId: string): WorkerAdapter | undefined {
     return this.options.adapters.find((candidate) => candidate.provider.id === providerId)
   }
 
+  get archivedCount(): number {
+    return this.archivedTasks.length
+  }
+
+  get archivePath(): string {
+    return this.options.archivePath
+  }
+
   async snapshot(): Promise<{
     providers: WorkerProviderStatus[]
     activeTaskId?: string
     tasks: WorkerTask[]
+    archivedCount: number
+    archivePath: string
     configuration: WorkerConfiguration
     rules: WorkerRuleFile[]
   }> {
@@ -85,14 +116,111 @@ export class WorkerCoordinator extends EventEmitter {
       providers,
       ...(this.activeTaskId ? { activeTaskId: this.activeTaskId } : {}),
       tasks: this.tasks.map((task) => ({ ...task, changedFiles: [...task.changedFiles] })),
+      archivedCount: this.archivedTasks.length,
+      archivePath: this.options.archivePath,
       configuration: config,
       rules,
     }
   }
 
   get(id: string): WorkerTask | undefined {
-    const task = this.tasks.find((candidate) => candidate.id === id)
+    const task = this.tasks.find((candidate) => candidate.id === id) ?? this.archivedTasks.find((candidate) => candidate.id === id)
     return task ? { ...task, changedFiles: [...task.changedFiles] } : undefined
+  }
+
+  getArchivedTasks(): WorkerTask[] {
+    return this.archivedTasks.map((task) => ({ ...task, archived: true, changedFiles: [...task.changedFiles] }))
+  }
+
+  async archiveTask(id: string): Promise<boolean> {
+    const index = this.tasks.findIndex((t) => t.id === id)
+    if (index === -1) return false
+    if (this.activeTaskId === id) throw new WorkerError('Cannot archive an active running task', 409)
+
+    const [task] = this.tasks.splice(index, 1)
+    if (task) {
+      task.archived = true
+      // Prepend to archive, avoiding duplicate IDs
+      this.archivedTasks = [task, ...this.archivedTasks.filter((t) => t.id !== task.id)].slice(0, MAX_ARCHIVE_TASKS)
+      await this.save()
+      this.emit('changed')
+      return true
+    }
+    return false
+  }
+
+  async archiveAllCompleted(): Promise<number> {
+    const toKeep: WorkerTask[] = []
+    const toArchive: WorkerTask[] = []
+
+    for (const task of this.tasks) {
+      if (task.id === this.activeTaskId || task.status === 'running' || task.status === 'queued') {
+        toKeep.push(task)
+      } else {
+        toArchive.push({ ...task, archived: true })
+      }
+    }
+
+    if (toArchive.length === 0) return 0
+
+    this.tasks = toKeep
+    const existingIds = new Set(this.archivedTasks.map((t) => t.id))
+    for (const t of toArchive) {
+      if (!existingIds.has(t.id)) {
+        this.archivedTasks.unshift(t)
+        existingIds.add(t.id)
+      }
+    }
+    this.archivedTasks = this.archivedTasks.slice(0, MAX_ARCHIVE_TASKS)
+
+    await this.save()
+    this.emit('changed')
+    return toArchive.length
+  }
+
+  async restoreTask(id: string): Promise<boolean> {
+    const index = this.archivedTasks.findIndex((t) => t.id === id)
+    if (index === -1) return false
+
+    const [task] = this.archivedTasks.splice(index, 1)
+    if (task) {
+      task.archived = false
+      this.tasks.unshift(task)
+      this.enforceRetentionLimit()
+      await this.save()
+      this.emit('changed', task)
+      return true
+    }
+    return false
+  }
+
+  private enforceRetentionLimit(): boolean {
+    if (this.tasks.length <= ACTIVE_TASK_LIMIT) return false
+
+    const keep: WorkerTask[] = []
+    const toArchive: WorkerTask[] = []
+
+    for (const task of this.tasks) {
+      if (keep.length < ACTIVE_TASK_LIMIT || task.id === this.activeTaskId || task.status === 'running' || task.status === 'queued') {
+        keep.push(task)
+      } else {
+        toArchive.push({ ...task, archived: true })
+      }
+    }
+
+    if (toArchive.length > 0) {
+      this.tasks = keep
+      const existingIds = new Set(this.archivedTasks.map((t) => t.id))
+      for (const t of toArchive) {
+        if (!existingIds.has(t.id)) {
+          this.archivedTasks.unshift(t)
+          existingIds.add(t.id)
+        }
+      }
+      this.archivedTasks = this.archivedTasks.slice(0, MAX_ARCHIVE_TASKS)
+      return true
+    }
+    return false
   }
 
   async start(input: {
@@ -148,12 +276,13 @@ export class WorkerCoordinator extends EventEmitter {
       createdAt: now,
       updatedAt: now,
       changedFiles: [],
+      archived: false,
       ...(input.model ? { model: input.model } : {}),
       ...(input.thinkingLevel ? { thinkingLevel: input.thinkingLevel } : {}),
     }
 
     this.tasks.unshift(task)
-    this.tasks = this.tasks.slice(0, MAX_TASKS)
+    this.enforceRetentionLimit()
     this.activeTaskId = task.id
     this.activeAdapter = adapter
     await this.save()
@@ -239,7 +368,10 @@ export class WorkerCoordinator extends EventEmitter {
       this.activeTaskId = undefined
       this.activeAdapter = undefined
     }
-    await this.update(task, { ...patch, status, finishedAt: new Date().toISOString() })
+    Object.assign(task, patch, { status, finishedAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+    this.enforceRetentionLimit()
+    await this.save()
+    this.emit('changed', task)
   }
 
   private async save(): Promise<void> {
@@ -250,8 +382,16 @@ export class WorkerCoordinator extends EventEmitter {
 
   private async saveDirect(): Promise<void> {
     await mkdir(dirname(this.options.storePath), { recursive: true })
-    const temporary = `${this.options.storePath}.${process.pid}.${randomUUID()}.tmp`
-    await writeFile(temporary, `${JSON.stringify({ schemaVersion: 1, tasks: this.tasks }, null, 2)}\n`, { mode: 0o600 })
-    await rename(temporary, this.options.storePath)
+    await mkdir(dirname(this.options.archivePath), { recursive: true })
+
+    // 1. Save active tasks
+    const activeTemp = `${this.options.storePath}.${process.pid}.${randomUUID()}.tmp`
+    await writeFile(activeTemp, `${JSON.stringify({ schemaVersion: 1, tasks: this.tasks }, null, 2)}\n`, { mode: 0o600 })
+    await rename(activeTemp, this.options.storePath)
+
+    // 2. Save archived tasks
+    const archiveTemp = `${this.options.archivePath}.${process.pid}.${randomUUID()}.tmp`
+    await writeFile(archiveTemp, `${JSON.stringify({ schemaVersion: 1, tasks: this.archivedTasks }, null, 2)}\n`, { mode: 0o600 })
+    await rename(archiveTemp, this.options.archivePath)
   }
 }
