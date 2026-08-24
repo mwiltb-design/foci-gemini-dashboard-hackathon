@@ -1021,6 +1021,24 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
     json(response, 200, { ok: true })
     return
   }
+  const sessionRenameMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/rename$/)
+  if (request.method === 'POST' && sessionRenameMatch) {
+    const id = decodeURIComponent(sessionRenameMatch[1])
+    const body = (await readJsonBody(request)) as { name?: string }
+    const name = String(body.name ?? '').trim()
+    if (!name || name.length > 100) throw new SystemError('Session name must contain between 1 and 100 characters', 400)
+    if (!await sessions.pathFor(id)) throw new SystemError('Session not found', 404)
+    if (id === currentSessionId) {
+      await rpc.request({ type: 'set_session_name', name })
+    } else {
+      await sessions.renameInactive(id, name)
+    }
+    await sendSnapshot()
+    record({ category: 'session', type: 'session_rename', severity: 'info', summary: `Renamed session to "${name}"`, sessionId: id })
+    broadcast({ type: 'sessions_changed' })
+    json(response, 200, { ok: true, id, name })
+    return
+  }
 
   if (request.method === 'POST' && url.pathname === '/api/workers/tasks') {
     const body = await readJsonBody(request)

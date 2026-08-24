@@ -107,6 +107,31 @@ export function useSessions(revision: number) {
     setRefreshRevision((current) => current + 1)
   }
 
+  async function renameSession(id: string, name: string): Promise<boolean> {
+    const trimmed = name.trim()
+    if (!trimmed) return false
+    try {
+      const response = await apiFetch(`/api/sessions/${encodeURIComponent(id)}/rename`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: trimmed }),
+      })
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null
+        throw new Error(body?.error ?? `Unable to rename session (${response.status})`)
+      }
+      setSessions((current) => current.map((s) => s.id === id ? { ...s, name: trimmed, explicitName: true } : s))
+      if (detail && detail.summary.id === id) {
+        setDetail({ ...detail, summary: { ...detail.summary, name: trimmed, explicitName: true } })
+      }
+      setRefreshRevision((current) => current + 1)
+      return true
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to rename session')
+      return false
+    }
+  }
+
   return {
     sessions: activeSessions,
     filtered,
@@ -118,6 +143,7 @@ export function useSessions(revision: number) {
     query,
     setQuery,
     setArchived,
+    renameSession,
     loading,
     error,
   }

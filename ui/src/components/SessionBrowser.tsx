@@ -60,6 +60,10 @@ interface SessionBrowserProps {
 export function SessionBrowser({ chat, onOpenChat }: SessionBrowserProps) {
   const browser = useSessions(chat.sessionsRevision)
   const [showArchived, setShowArchived] = useState(false)
+  const [editingName, setEditingName] = useState(false)
+  const [nameInput, setNameInput] = useState('')
+  const [savingRename, setSavingRename] = useState(false)
+
   const listedSessions: SessionSummary[] = showArchived ? browser.archivedSessions : browser.filtered
   const selected = [...browser.sessions, ...browser.archivedSessions].find((session) => session.id === browser.selectedId)
   const totalMessages = browser.sessions.reduce((sum, session) => sum + session.messageCount, 0)
@@ -78,10 +82,29 @@ export function SessionBrowser({ chat, onOpenChat }: SessionBrowserProps) {
     onOpenChat()
   }
 
-  function renameSession() {
-    if (!selected || busy) return
-    const name = window.prompt('Session name', selected.name)?.trim()
-    if (name && name !== selected.name) chat.renameSession(selected.id, name)
+  function startRename() {
+    if (!selected || busy || savingRename) return
+    setNameInput(selected.name)
+    setEditingName(true)
+  }
+
+  async function submitRename() {
+    if (!selected || savingRename) return
+    const trimmed = nameInput.trim()
+    if (trimmed && trimmed !== selected.name) {
+      setSavingRename(true)
+      try {
+        await browser.renameSession(selected.id, trimmed)
+        chat.renameSession(selected.id, trimmed)
+      } finally {
+        setSavingRename(false)
+      }
+    }
+    setEditingName(false)
+  }
+
+  function cancelRename() {
+    setEditingName(false)
   }
 
   function duplicateSession() {
@@ -136,7 +159,15 @@ export function SessionBrowser({ chat, onOpenChat }: SessionBrowserProps) {
               {browser.loading && <div className="session-empty">Loading sessions…</div>}
               {!browser.loading && listedSessions.length === 0 && <div className="session-empty">{showArchived ? 'No archived sessions.' : 'No matching sessions.'}</div>}
               {listedSessions.map((session) => (
-                <button className={`session-row ${browser.selectedId === session.id ? 'is-selected' : ''}`} type="button" key={session.id} onClick={() => browser.setSelectedId(session.id)}>
+                <button
+                  className={`session-row ${browser.selectedId === session.id ? 'is-selected' : ''}`}
+                  type="button"
+                  key={session.id}
+                  onClick={() => {
+                    setEditingName(false)
+                    browser.setSelectedId(session.id)
+                  }}
+                >
                   <span className="session-row__title">{session.name}</span>
                   <span className="session-row__meta">
                     {session.id === browser.currentSessionId && <Chip tone="accent">active</Chip>}
@@ -155,13 +186,67 @@ export function SessionBrowser({ chat, onOpenChat }: SessionBrowserProps) {
                 <header className="session-detail-head">
                   <div>
                     <span className="eyebrow">{selected.id === browser.currentSessionId ? 'Active session' : 'Saved session'}</span>
-                    <h2>{selected.name}</h2>
+                    {editingName ? (
+                      <form
+                        style={{ display: 'flex', gap: '8px', alignItems: 'center', margin: '6px 0', flexWrap: 'wrap' }}
+                        onSubmit={(e) => {
+                          e.preventDefault()
+                          void submitRename()
+                        }}
+                      >
+                        <input
+                          type="text"
+                          value={nameInput}
+                          onChange={(event) => setNameInput(event.target.value)}
+                          autoFocus
+                          maxLength={100}
+                          style={{
+                            fontSize: '15px',
+                            fontWeight: 600,
+                            padding: '4px 10px',
+                            background: 'var(--field)',
+                            color: 'var(--text)',
+                            border: '1px solid var(--accent, #63e6be)',
+                            borderRadius: '6px',
+                            outline: 'none',
+                            minWidth: '240px',
+                            maxWidth: '400px',
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') cancelRename()
+                          }}
+                          disabled={savingRename}
+                        />
+                        <button className="button button--primary" type="submit" disabled={savingRename || !nameInput.trim()} style={{ padding: '4px 10px', fontSize: '12px' }}>
+                          {savingRename ? 'Saving…' : 'Save'}
+                        </button>
+                        <button className="button button--quiet" type="button" onClick={cancelRename} disabled={savingRename} style={{ padding: '4px 10px', fontSize: '12px' }}>
+                          Cancel
+                        </button>
+                      </form>
+                    ) : (
+                      <h2
+                        style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+                        title="Click to rename"
+                        onClick={startRename}
+                      >
+                        {selected.name}
+                        <span style={{ fontSize: '12px', opacity: 0.5, fontWeight: 'normal' }}>✏️</span>
+                      </h2>
+                    )}
                     <p>{selected.model ?? 'No model activity'} · created {dateTime(selected.createdAt)}</p>
                   </div>
                   <div className="session-actions">
                     {selected.archived
                       ? <button className="button button--primary" type="button" onClick={() => void restoreSession()}>Restore</button>
-                      : <><button className="button button--primary" type="button" onClick={openSession} disabled={busy}>{selected.id === browser.currentSessionId ? 'Open Chat' : 'Resume'}</button><button className="button button--quiet" type="button" onClick={renameSession} disabled={busy}>Rename</button><button className="button button--quiet" type="button" onClick={duplicateSession} disabled={busy}>Duplicate</button>{selected.id !== browser.currentSessionId && <button className="button button--quiet" type="button" onClick={() => void archiveSession()} disabled={busy}>Archive</button>}</>}
+                      : (
+                        <>
+                          <button className="button button--primary" type="button" onClick={openSession} disabled={busy}>{selected.id === browser.currentSessionId ? 'Open Chat' : 'Resume'}</button>
+                          <button className="button button--quiet" type="button" onClick={startRename} disabled={busy || savingRename}>Rename</button>
+                          <button className="button button--quiet" type="button" onClick={duplicateSession} disabled={busy}>Duplicate</button>
+                          {selected.id !== browser.currentSessionId && <button className="button button--quiet" type="button" onClick={() => void archiveSession()} disabled={busy}>Archive</button>}
+                        </>
+                      )}
                   </div>
                 </header>
                 <SessionTimeline items={browser.detail.timeline} onFork={forkFrom} />
