@@ -3,6 +3,7 @@
 # 🚀 Pi Dashboard
 ### Next-Generation Native Desktop Agent Workspace & Multi-Provider Coordinator
 
+[![Website](https://img.shields.io/badge/Website-focidashboard.dev-157d78.svg)](https://focidashboard.dev/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-2ea44f)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178c6)]()
@@ -10,7 +11,8 @@
 [![React](https://img.shields.io/badge/React-18-61dafb)]()
 
 <p align="center">
-  <b>A powerful, privacy-first desktop environment orchestrating the Pi Coding Agent alongside Google Antigravity, OpenAI Codex, and Anthropic Claude.</b>
+  <b>A powerful, privacy-first desktop environment orchestrating the Pi Coding Agent alongside Google Antigravity, OpenAI Codex, and Anthropic Claude.</b><br/>
+  🌐 <a href="https://focidashboard.dev/"><b>focidashboard.dev</b></a> — Official website, documentation, and user guides.
 </p>
 
 <img src="./docs/assets/preview.png" alt="Pi Dashboard Preview" width="100%" />
