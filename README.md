@@ -74,8 +74,8 @@
 
 ```powershell
 # Clone the repository
-git clone https://github.com/mwiltb-design/pi-dashboard.git Pi-Dashboards
-cd Pi-Dashboards
+git clone https://github.com/mwiltb-design/pi-dashboard.git
+cd pi-dashboard
 
 # Launch developer desktop environment (auto-installs dependencies)
 .\scripts\dev.ps1
@@ -88,7 +88,7 @@ cd Pi-Dashboards
 ## 📁 Architecture Overview
 
 ```
-Pi-Dashboards/
+pi-dashboard/
 ├── electron/          # Native Electron shell & window manager
 ├── server/            # Backend API, RPC process runner & PTY bridge
 │   ├── docs/          # Built-in documentation (abilities, limits, shortcuts)
