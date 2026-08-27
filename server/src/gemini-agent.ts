@@ -1,8 +1,7 @@
 import { spawn } from 'node:child_process'
 import { EventEmitter } from 'node:events'
-import { existsSync } from 'node:fs'
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
-import { basename, dirname, relative, resolve } from 'node:path'
+import { dirname, resolve, sep } from 'node:path'
 import { FunctionCallingConfigMode, GoogleGenAI, Type, type Content, type FunctionCall, type FunctionDeclaration } from '@google/genai'
 import type { JsonObject, RpcEvent, RpcResponse } from './types.js'
 
@@ -60,7 +59,8 @@ export class GeminiAgentProcess extends EventEmitter {
   private sessionName = 'Gemini Cloud Session'
   private contents: Content[] = []
   private dashboardMessages: DashboardMessage[] = []
-  private readonly model: string
+  private model: string
+  private thinkingLevel = 'auto'
 
   constructor(private readonly options: GeminiAgentOptions) {
     super()
@@ -100,6 +100,20 @@ export class GeminiAgentProcess extends EventEmitter {
       if (type === 'get_state') return this.response(id, type, this.state())
       if (type === 'get_session_stats') return this.response(id, type, { contextUsage: { tokens: null, contextWindow: 1_000_000, percent: null } })
       if (type === 'get_messages') return this.response(id, type, { messages: this.dashboardMessages })
+      if (type === 'get_available_models') {
+        return this.response(id, type, { models: this.availableModels() })
+      }
+      if (type === 'get_commands') return this.response(id, type, { commands: [] })
+      if (type === 'set_model') {
+        const requestedModel = typeof command.modelId === 'string' ? command.modelId.trim() : ''
+        if (requestedModel) this.model = requestedModel
+        return this.response(id, type, this.state())
+      }
+      if (type === 'set_thinking_level') {
+        const requestedLevel = typeof command.level === 'string' ? command.level.trim() : ''
+        if (requestedLevel) this.thinkingLevel = requestedLevel
+        return this.response(id, type, this.state())
+      }
       if (type === 'new_session') {
         this.newSession()
         return this.response(id, type, this.state())
@@ -131,12 +145,23 @@ export class GeminiAgentProcess extends EventEmitter {
   private state(): Record<string, unknown> {
     return {
       model: { provider: 'google', id: this.model },
-      thinkingLevel: 'auto',
+      thinkingLevel: this.thinkingLevel,
       isStreaming: this.isStreaming,
       sessionId: this.sessionId,
       sessionName: this.sessionName,
       messageCount: this.dashboardMessages.length,
     }
+  }
+
+  private availableModels(): Array<Record<string, unknown>> {
+    const models = [this.model, 'gemini-3.5-flash', 'gemini-3.5-pro', 'gemini-2.5-flash', 'gemini-2.5-pro']
+    return [...new Set(models)].map((id) => ({
+      id,
+      provider: 'google',
+      name: `Gemini (${id})`,
+      reasoning: true,
+      contextWindow: id.includes('pro') ? 2_000_000 : 1_000_000,
+    }))
   }
 
   private newSession(): void {
@@ -159,17 +184,26 @@ export class GeminiAgentProcess extends EventEmitter {
     this.contents.push({ role: 'user', parts: [{ text: message }] })
     this.emitEvent({ type: 'agent_start' })
     this.emitEvent({ type: 'message_start', message: userMessage })
+    this.emitEvent({ type: 'message_start', message: { role: 'assistant', content: textContent('') } })
 
     let assistantText = ''
     try {
       for (let round = 0; round < 8; round += 1) {
+        let roundText = ''
         const calls = await this.generateRound((delta) => {
+          roundText += delta
           assistantText += delta
           this.emitEvent({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta } })
         })
-        if (calls.length === 0) break
-        this.contents.push({ role: 'model', parts: calls.map((call) => ({ functionCall: call })) })
-        for (const call of calls) {
+        if (calls.length === 0) {
+          if (roundText) this.contents.push({ role: 'model', parts: [{ text: roundText }] })
+          break
+        }
+        this.contents.push({ role: 'model', parts: [
+          ...(roundText ? [{ text: roundText }] : []),
+          ...calls.map((call) => ({ functionCall: call })),
+        ] })
+        const pendingTools = calls.map(async (call) => {
           const toolCallId = call.id || `gemini-tool-${Date.now()}-${Math.random().toString(36).slice(2)}`
           const toolName = call.name || 'unknown_tool'
           const args = call.args ?? {}
@@ -179,8 +213,10 @@ export class GeminiAgentProcess extends EventEmitter {
           const output = result.ok ? result.output : result.error
           this.dashboardMessages.push({ role: 'toolResult', toolCallId, toolName, isError: !result.ok, content: textContent(output) })
           this.emitEvent({ type: 'tool_execution_end', toolCallId, toolName, isError: !result.ok, result: { content: textContent(output) } })
-          this.contents.push({ role: 'user', parts: [{ functionResponse: { id: call.id, name: toolName, response: result.ok ? { output } : { error: output } } }] })
-        }
+          return { functionResponse: { id: call.id, name: toolName, response: result.ok ? { output } : { error: output } } }
+        })
+        const functionResponses = await Promise.all(pendingTools)
+        this.contents.push({ role: 'user', parts: functionResponses })
       }
       const assistantMessage: DashboardMessage = { role: 'assistant', content: textContent(assistantText) }
       this.dashboardMessages.push(assistantMessage)
@@ -234,12 +270,16 @@ export class GeminiAgentProcess extends EventEmitter {
     try { return await readFile(this.safePath(path), 'utf8') } catch { return '' }
   }
 
-  private safePath(input: string): string {
+  private safePath(input: string, allowWorkspaceRoot = false): string {
     if (!input || input.includes('\0')) throw new Error('Invalid path')
-    const target = resolve(this.options.cwd, input)
-    const rel = relative(this.options.cwd, target)
-    if (rel.startsWith('..') || rel === '..' || rel.includes(`..${String.fromCharCode(92)}`) || resolve(target) === resolve(this.options.cwd)) {
-      if (resolve(target) !== resolve(this.options.cwd)) throw new Error('Path must stay inside the workspace')
+    const workspaceRoot = resolve(this.options.cwd)
+    const target = resolve(workspaceRoot, input)
+    const normalize = (value: string): string => process.platform === 'win32' ? value.toLowerCase() : value
+    const normalizedRoot = normalize(workspaceRoot)
+    const normalizedTarget = normalize(target)
+    const isRoot = normalizedTarget === normalizedRoot
+    if ((!allowWorkspaceRoot && isRoot) || (!isRoot && !normalizedTarget.startsWith(`${normalizedRoot}${sep}`))) {
+      throw new Error('Path must stay inside the workspace')
     }
     return target
   }
@@ -261,7 +301,7 @@ export class GeminiAgentProcess extends EventEmitter {
       }
       if (name === 'list_directory') {
         const path = String(args.path ?? '.')
-        const target = this.safePath(path)
+        const target = this.safePath(path, true)
         const entries = await readdir(target, { withFileTypes: true })
         return { ok: true, output: entries.map((entry) => `${entry.isDirectory() ? 'dir ' : 'file'}\t${entry.name}`).join('\n').slice(0, 50_000) }
       }
@@ -275,14 +315,18 @@ export class GeminiAgentProcess extends EventEmitter {
   private async runCommand(command: string): Promise<{ ok: true; output: string } | { ok: false; error: string }> {
     const trimmed = command.trim()
     if (!trimmed) return { ok: false, error: 'Command is required' }
-    const blocked = /(?:\brm\b|\brmdir\b|\bdel\b|\bformat\b|\bshutdown\b|\breboot\b|>|>>|&&|\|\||;|`|\$\()/i
+    if (/[\r\n]/.test(command)) return { ok: false, error: 'Command blocked by Foci safety policy' }
+    const blocked = /(?:\brm\b|\brmdir\b|\bdel\b|\bformat\b|\bshutdown\b|\breboot\b|[>&|;`]|\$\()/i
     if (blocked.test(trimmed)) return { ok: false, error: 'Command blocked by Foci safety policy' }
     const first = trimmed.split(/\s+/)[0]?.toLowerCase() ?? ''
-    const allowed = new Set(['node', 'npm', 'git', 'ls', 'dir', 'pwd', 'echo', 'find', 'grep'])
-    if (!allowed.has(first) && !(first === 'npx' && trimmed.includes('tsc'))) return { ok: false, error: `Command not allowlisted: ${first}` }
+    const allowed = new Set(['npm', 'git', 'ls', 'dir', 'pwd', 'echo', 'find', 'grep'])
+    if (!allowed.has(first)) return { ok: false, error: `Command not allowlisted: ${first}` }
+
+    const inheritedEnvironment = new Set(['PATH', 'PATHEXT', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'TEMP', 'TMP', 'LANG', 'LC_ALL', 'TERM', 'NODE_ENV'])
+    const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => inheritedEnvironment.has(name.toUpperCase())))
 
     return await new Promise((resolvePromise) => {
-      const child = spawn(trimmed, { cwd: this.options.cwd, shell: true, env: process.env })
+      const child = spawn(trimmed, { cwd: this.options.cwd, shell: true, env })
       let output = ''
       const timeout = setTimeout(() => {
         child.kill('SIGTERM')

@@ -74,6 +74,12 @@ export class DashboardAuth {
       try {
         const url = new URL(origin)
         if (['localhost', '127.0.0.1', '::1'].includes(url.hostname)) isAllowed = true
+        const forwardedHosts = request.headers['x-forwarded-host']
+        const requestHosts = [request.headers.host, ...(Array.isArray(forwardedHosts) ? forwardedHosts : [forwardedHosts])]
+          .flatMap((value) => typeof value === 'string' ? value.split(',') : [])
+          .map((value) => value.trim().toLowerCase())
+          .filter(Boolean)
+        if (requestHosts.includes(url.host.toLowerCase())) isAllowed = true
       } catch {}
     }
     return isAllowed && (!required || this.authenticate(request))

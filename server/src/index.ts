@@ -44,7 +44,9 @@ import type { BrowserCommand, RpcEvent, ServerMessage } from './types.js'
 const port = Number(process.env.PORT ?? 4317)
 const host = process.env.HOST ?? '0.0.0.0'
 const moduleDir = dirname(fileURLToPath(import.meta.url))
-const staticUiDir = process.env.FOCI_STATIC_UI_DIR ?? resolve(moduleDir, '../../ui/dist')
+const staticUiDir = process.env.FOCI_STATIC_UI_DIR
+  ?? [resolve(moduleDir, '../../ui/dist'), resolve(moduleDir, '../../../../ui/dist')].find((candidate) => existsSync(candidate))
+  ?? resolve(moduleDir, '../../ui/dist')
 const defaultHomeAgentDir = resolve(homedir(), '.pi/agent')
 const defaultDashboardDataDir = resolve(homedir(), '.pi-dashboard')
 try { mkdirSync(defaultDashboardDataDir, { recursive: true }) } catch {}

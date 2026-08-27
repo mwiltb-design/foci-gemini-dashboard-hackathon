@@ -1,5 +1,6 @@
 # Foci Dashboard — Google Cloud Run container
-FROM node:22-alpine AS deps
+FROM node:22-bookworm-slim AS deps
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package*.json ./
 COPY server/package*.json ./server/
@@ -7,14 +8,15 @@ COPY ui/package*.json ./ui/
 COPY electron/package*.json ./electron/
 RUN npm ci
 
-FROM node:22-alpine AS builder
+FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm --prefix server run build:emit
 RUN npm --prefix ui run build
 
-FROM node:22-alpine AS runner
+FROM node:22-bookworm-slim AS runner
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=8080
@@ -35,6 +37,7 @@ COPY server/templates ./server/templates
 COPY server/package*.json ./server/dist/server/
 COPY server/templates ./server/dist/server/templates
 
-RUN mkdir -p /workspace
+RUN mkdir -p /workspace && chown node:node /workspace
+USER node
 EXPOSE 8080
 CMD ["node", "server/dist/server/src/index.js"]
