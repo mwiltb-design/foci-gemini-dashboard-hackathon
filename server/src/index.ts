@@ -6,6 +6,7 @@ import { createServer, request as httpRequest, type IncomingMessage, type Server
 import { connect } from 'node:net'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, extname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { WebSocket, WebSocketServer } from 'ws'
 import { ActivityStore, type ActivityCategory, type ActivitySeverity } from './activity-store.js'
 import { DashboardAuth } from './auth.js'
@@ -14,6 +15,7 @@ import { FileAccessError, FileService } from './file-service.js'
 import { GitService } from './git-service.js'
 import { OnboardingError, OnboardingService } from './onboarding-service.js'
 import { PiRpcProcess } from './pi-rpc.js'
+import { GeminiAgentProcess } from './gemini-agent.js'
 import { pluginAssetContentSecurityPolicy } from './plugin-asset-policy.js'
 import { PluginHostError } from './plugin-host.js'
 import { PluginError, PluginService } from './plugin-service.js'
@@ -30,6 +32,7 @@ import { SubPiWorkerAdapter } from './sub-pi-worker.js'
 import { AntigravityWorkerAdapter } from './antigravity-worker.js'
 import { CodexWorkerAdapter } from './codex-worker.js'
 import { ClaudeWorkerAdapter } from './claude-worker.js'
+import { GeminiWorkerAdapter } from './gemini-worker.js'
 import { WorkerRulesService } from './worker-rules.js'
 import { WorkerConsoleSession } from './worker-console-session.js'
 import { WorkerCoordinator, WorkerError } from './worker-coordinator.js'
@@ -40,6 +43,8 @@ import type { BrowserCommand, RpcEvent, ServerMessage } from './types.js'
 
 const port = Number(process.env.PORT ?? 4317)
 const host = process.env.HOST ?? '0.0.0.0'
+const moduleDir = dirname(fileURLToPath(import.meta.url))
+const staticUiDir = process.env.FOCI_STATIC_UI_DIR ?? resolve(moduleDir, '../../ui/dist')
 const defaultHomeAgentDir = resolve(homedir(), '.pi/agent')
 const defaultDashboardDataDir = resolve(homedir(), '.pi-dashboard')
 try { mkdirSync(defaultDashboardDataDir, { recursive: true }) } catch {}
@@ -113,17 +118,20 @@ const workerInternalToken = randomBytes(32).toString('base64url')
 const profile = dashboardProfile()
 const enabledFeatures = new Set<DashboardFeature>(profile.features)
 let rpcArgs = ['--mode', 'rpc', '--continue', '--name', 'Pi Dashboard', '--extension', runtimeInfoExtension, '--extension', curatedMemoryExtension, '--extension', memoryCheckpointExtension, '--extension', pluginToolsExtension, ...(enabledFeatures.has('workers') ? ['--extension', workersExtension] : []), ...(rpcSessionDir ? ['--session-dir', rpcSessionDir] : [])]
-let rpc = registerRpcListeners(new PiRpcProcess({
-  cwd: workspace,
-  args: rpcArgs,
-  env: {
-    PI_DASHBOARD_WORKER_INTERNAL_TOKEN: workerInternalToken,
-    PI_DASHBOARD_PLUGIN_STATE_ROOT: pluginStateRoot,
-    PI_DASHBOARD_PLUGIN_CODE_ROOT: pluginCodeRoot,
-    PI_DASHBOARD_PLUGIN_AUTHORING_SKILL_PATH: dashboardPluginAuthoringSkill,
-    PI_DASHBOARD_REFERENCE_SKILL_PATH: dashboardReferenceSkill,
-  },
-}))
+const useGeminiAgent = (process.env.FOCI_AGENT_PROVIDER ?? process.env.PI_DASHBOARD_AGENT_PROVIDER ?? '').toLowerCase() === 'gemini'
+let rpc = registerRpcListeners(useGeminiAgent
+  ? new GeminiAgentProcess({ cwd: workspace, sessionDir: rpcSessionDir })
+  : new PiRpcProcess({
+    cwd: workspace,
+    args: rpcArgs,
+    env: {
+      PI_DASHBOARD_WORKER_INTERNAL_TOKEN: workerInternalToken,
+      PI_DASHBOARD_PLUGIN_STATE_ROOT: pluginStateRoot,
+      PI_DASHBOARD_PLUGIN_CODE_ROOT: pluginCodeRoot,
+      PI_DASHBOARD_PLUGIN_AUTHORING_SKILL_PATH: dashboardPluginAuthoringSkill,
+      PI_DASHBOARD_REFERENCE_SKILL_PATH: dashboardReferenceSkill,
+    },
+  }))
 let sessions = new SessionCatalog(sessionRoot, workspace)
 let sessionArchive = new SessionArchiveService(sessionArchivePath)
 let files = new FileService(workspace)
@@ -169,10 +177,14 @@ let claudeWorker = new ClaudeWorkerAdapter({
   git,
   enabled: enabledFeatures.has('workers'),
 })
+let geminiWorker = new GeminiWorkerAdapter({
+  workspace,
+  enabled: enabledFeatures.has('workers'),
+})
 let workers = new WorkerCoordinator({
   storePath: workerStorePath,
   archivePath: workerArchivePath,
-  adapters: [subPi, antigravityWorker, codexWorker, claudeWorker],
+  adapters: [geminiWorker, subPi, antigravityWorker, codexWorker, claudeWorker],
   rulesService: workerRules,
   bounds: workerBounds,
   primaryDefaults: async () => {
@@ -555,7 +567,9 @@ function queueManagement(task: () => Promise<void>): Promise<void> {
   return result
 }
 
-function registerRpcListeners(instance: PiRpcProcess): PiRpcProcess {
+type DashboardRpcProcess = PiRpcProcess | GeminiAgentProcess
+
+function registerRpcListeners(instance: DashboardRpcProcess): DashboardRpcProcess {
   instance.on('event', (event: RpcEvent) => {
     broadcast({ type: 'event', event })
 
@@ -1262,7 +1276,7 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
     return
   }
 
-  if (request.method !== 'GET') {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
     json(response, 405, { error: 'Method not allowed' })
     return
   }
@@ -1501,7 +1515,39 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
     }) })
     return
   }
+  const requestMethod = String(request.method ?? 'GET')
+  if (requestMethod === 'GET' || requestMethod === 'HEAD') {
+    const served = await tryServeStaticUi(url.pathname, response, requestMethod === 'HEAD')
+    if (served) return
+  }
+
   json(response, 404, { error: 'Not found' })
+}
+
+async function tryServeStaticUi(pathname: string, response: ServerResponse, headOnly: boolean): Promise<boolean> {
+  if (!existsSync(staticUiDir)) return false
+  const decodedPath = decodeURIComponent(pathname)
+  const requested = decodedPath === '/' ? '/index.html' : decodedPath
+  let targetPath = resolve(staticUiDir, `.${requested}`)
+  if (!targetPath.startsWith(staticUiDir)) return false
+  try {
+    const info = await stat(targetPath)
+    if (info.isDirectory()) targetPath = resolve(targetPath, 'index.html')
+  } catch {
+    targetPath = resolve(staticUiDir, 'index.html')
+  }
+  const extension = extname(targetPath).toLowerCase()
+  const contentType = extension === '.html' ? 'text/html; charset=utf-8'
+    : extension === '.js' ? 'text/javascript; charset=utf-8'
+      : extension === '.css' ? 'text/css; charset=utf-8'
+        : extension === '.svg' ? 'image/svg+xml'
+          : extension === '.json' ? 'application/json; charset=utf-8'
+            : 'application/octet-stream'
+  const body = await readFile(targetPath)
+  response.writeHead(200, { 'content-type': contentType, 'cache-control': extension === '.html' ? 'no-store' : 'public, max-age=31536000, immutable' })
+  if (!headOnly) response.end(body)
+  else response.end()
+  return true
 }
 
 const server = createServer((request, response) => {

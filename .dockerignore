@@ -1,0 +1,12 @@
+node_modules
+server/node_modules
+ui/node_modules
+electron/node_modules
+.git
+.gitignore
+**/dist
+.pi-dashboard
+.env
+.env.*
+npm-debug.log*
+worker-artifacts

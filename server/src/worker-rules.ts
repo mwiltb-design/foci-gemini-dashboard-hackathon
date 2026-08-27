@@ -14,6 +14,7 @@ const DEFAULT_CONFIG: WorkerConfiguration = {
   stackPreset: 'developer',
   showRulesEditor: true,
   providersEnabled: {
+    'gemini-worker': true,
     'sub-pi': true,
     'antigravity-cli': true,
     'codex-cli': true,
