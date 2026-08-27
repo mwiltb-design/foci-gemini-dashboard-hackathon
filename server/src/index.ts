@@ -16,7 +16,7 @@ import { FileAccessError, FileService } from './file-service.js'
 import { GitService } from './git-service.js'
 import { OnboardingError, OnboardingService } from './onboarding-service.js'
 import { PiRpcProcess } from './pi-rpc.js'
-import { GeminiAgentProcess } from './gemini-agent.js'
+import { GeminiAgentProcess, type GeminiWorkerDelegateInput, type GeminiWorkerDelegateResult } from './gemini-agent.js'
 import { pluginAssetContentSecurityPolicy } from './plugin-asset-policy.js'
 import { PluginHostError } from './plugin-host.js'
 import { PluginError, PluginService } from './plugin-service.js'
@@ -123,7 +123,7 @@ const enabledFeatures = new Set<DashboardFeature>(profile.features)
 let rpcArgs = ['--mode', 'rpc', '--continue', '--name', 'Pi Dashboard', '--extension', runtimeInfoExtension, '--extension', curatedMemoryExtension, '--extension', memoryCheckpointExtension, '--extension', pluginToolsExtension, ...(enabledFeatures.has('workers') ? ['--extension', workersExtension] : []), ...(rpcSessionDir ? ['--session-dir', rpcSessionDir] : [])]
 const useGeminiAgent = (process.env.FOCI_AGENT_PROVIDER ?? process.env.PI_DASHBOARD_AGENT_PROVIDER ?? '').toLowerCase() === 'gemini'
 let rpc = registerRpcListeners(useGeminiAgent
-  ? new GeminiAgentProcess({ cwd: workspace, sessionDir: rpcSessionDir })
+  ? new GeminiAgentProcess({ cwd: workspace, sessionDir: rpcSessionDir, workerDelegate: delegateWorker })
   : new PiRpcProcess({
     cwd: workspace,
     args: rpcArgs,
@@ -250,6 +250,17 @@ async function state(): Promise<Record<string, unknown>> {
   return (response.data ?? {}) as Record<string, unknown>
 }
 
+async function delegateWorker(input: GeminiWorkerDelegateInput): Promise<GeminiWorkerDelegateResult> {
+  const started = await workers.start(input)
+  const deadline = Date.now() + started.bounds.timeoutMs + 10_000
+  let task = started
+  while ((task.status === 'queued' || task.status === 'running') && Date.now() < deadline) {
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 500))
+    task = workers.get(started.id) ?? task
+  }
+  return task
+}
+
 async function ensureIdle(): Promise<Record<string, unknown>> {
   const current = await state()
   if (current.isStreaming) throw new Error('Wait for Pi to finish or stop the active response before changing sessions')
@@ -367,10 +378,14 @@ async function switchActiveWorkspace(targetWorkspace: string): Promise<{ workspa
     git,
     enabled: enabledFeatures.has('workers'),
   })
+  geminiWorker = new GeminiWorkerAdapter({
+    workspace,
+    enabled: enabledFeatures.has('workers'),
+  })
   workers = new WorkerCoordinator({
     storePath: workerStorePath,
     archivePath: workerArchivePath,
-    adapters: [subPi, antigravityWorker, codexWorker, claudeWorker],
+    adapters: [geminiWorker, subPi, antigravityWorker, codexWorker, claudeWorker],
     rulesService: workerRules,
     bounds: workerBounds,
     primaryDefaults: async () => {
@@ -384,17 +399,19 @@ async function switchActiveWorkspace(targetWorkspace: string): Promise<{ workspa
   })
 
   rpcArgs = ['--mode', 'rpc', '--continue', '--name', 'Pi Dashboard', '--extension', runtimeInfoExtension, '--extension', curatedMemoryExtension, '--extension', memoryCheckpointExtension, '--extension', pluginToolsExtension, ...(enabledFeatures.has('workers') ? ['--extension', workersExtension] : []), '--session-dir', currentRpcSessionDir]
-  rpc = registerRpcListeners(new PiRpcProcess({
-    cwd: workspace,
-    args: rpcArgs,
-    env: {
-      PI_DASHBOARD_WORKER_INTERNAL_TOKEN: workerInternalToken,
-      PI_DASHBOARD_PLUGIN_STATE_ROOT: pluginStateRoot,
-      PI_DASHBOARD_PLUGIN_CODE_ROOT: pluginCodeRoot,
-      PI_DASHBOARD_PLUGIN_AUTHORING_SKILL_PATH: dashboardPluginAuthoringSkill,
-      PI_DASHBOARD_REFERENCE_SKILL_PATH: dashboardReferenceSkill,
-    },
-  }))
+  rpc = registerRpcListeners(useGeminiAgent
+    ? new GeminiAgentProcess({ cwd: workspace, sessionDir: rpcSessionDir, workerDelegate: delegateWorker })
+    : new PiRpcProcess({
+      cwd: workspace,
+      args: rpcArgs,
+      env: {
+        PI_DASHBOARD_WORKER_INTERNAL_TOKEN: workerInternalToken,
+        PI_DASHBOARD_PLUGIN_STATE_ROOT: pluginStateRoot,
+        PI_DASHBOARD_PLUGIN_CODE_ROOT: pluginCodeRoot,
+        PI_DASHBOARD_PLUGIN_AUTHORING_SKILL_PATH: dashboardPluginAuthoringSkill,
+        PI_DASHBOARD_REFERENCE_SKILL_PATH: dashboardReferenceSkill,
+      },
+    }))
 
   await Promise.all([
     activity.initialize(),
@@ -1489,10 +1506,13 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
   }
   if (url.pathname === '/api/sessions') {
     const sessionList = await sessions.list()
-    await sessionArchive.archiveInactive(sessionList, currentSessionId)
+    const catalogCurrentSessionId = currentSessionId && sessionList.some((session) => session.id === currentSessionId)
+      ? currentSessionId
+      : undefined
+    await sessionArchive.archiveInactive(sessionList, catalogCurrentSessionId)
     json(response, 200, {
       sessions: sessionList.map((session) => ({ ...session, archived: sessionArchive.isArchived(session.id) })),
-      currentSessionId,
+      ...(catalogCurrentSessionId ? { currentSessionId: catalogCurrentSessionId } : {}),
       archiveAfterDays: 30,
     })
     return

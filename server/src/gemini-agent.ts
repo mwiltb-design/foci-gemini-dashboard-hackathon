@@ -8,7 +8,34 @@ import type { JsonObject, RpcEvent, RpcResponse } from './types.js'
 interface GeminiAgentOptions {
   cwd: string
   sessionDir?: string
+  workerDelegate?: GeminiWorkerDelegate
 }
+
+const workerProviderIds = ['gemini-worker', 'sub-pi', 'antigravity-cli', 'codex-cli', 'claude-cli'] as const
+const workerModes = ['research', 'review', 'implement'] as const
+
+export interface GeminiWorkerDelegateInput {
+  providerId?: typeof workerProviderIds[number]
+  mode: typeof workerModes[number]
+  prompt: string
+  bounds?: {
+    turnLimit?: number
+    timeoutMs?: number
+    resultLimitBytes?: number
+  }
+}
+
+export interface GeminiWorkerDelegateResult {
+  id: string
+  status: string
+  sessionId?: string
+  result?: string
+  resultTruncated?: boolean
+  changedFiles?: Array<{ path: string; state: string }>
+  error?: string
+}
+
+export type GeminiWorkerDelegate = (input: GeminiWorkerDelegateInput) => Promise<GeminiWorkerDelegateResult>
 
 interface DashboardMessage {
   role: 'user' | 'assistant' | 'toolResult'
@@ -38,6 +65,28 @@ const toolDeclarations: FunctionDeclaration[] = [
     name: 'run_command',
     description: 'Run a safe, bounded workspace command. Destructive shell operators and commands are blocked.',
     parameters: { type: Type.OBJECT, properties: { command: { type: Type.STRING } }, required: ['command'] },
+  },
+  {
+    name: 'dashboard_delegate_worker',
+    description: 'Start one bounded worker task and wait for its result. Use a specialized provider for narrow research, review, or implementation work.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        providerId: { type: Type.STRING, enum: [...workerProviderIds], description: 'Worker provider. Defaults to sub-pi.' },
+        mode: { type: Type.STRING, enum: [...workerModes], description: 'Worker task mode.' },
+        prompt: { type: Type.STRING, description: 'Complete bounded task and expected deliverable.' },
+        bounds: {
+          type: Type.OBJECT,
+          description: 'Optional execution bounds.',
+          properties: {
+            turnLimit: { type: Type.NUMBER, description: 'Maximum turns (1-30).' },
+            timeoutMinutes: { type: Type.NUMBER, description: 'Maximum runtime in minutes (1-30).' },
+            resultLimitKb: { type: Type.NUMBER, description: 'Maximum result size in KB (1-64).' },
+          },
+        },
+      },
+      required: ['mode', 'prompt'],
+    },
   },
 ]
 
@@ -263,6 +312,7 @@ export class GeminiAgentProcess extends EventEmitter {
       'You are Foci Dashboard, a cloud Gemini agent for a hackathon demo.',
       'Be concise, transparent, and safe. Prefer small, reversible file edits.',
       'Use tools when you need exact workspace facts. Do not claim a file changed unless a tool succeeded.',
+      'Use dashboard_delegate_worker for narrow delegated tasks. Review its result before presenting findings or accepting changes.',
       'For shell commands, use the smallest safe command and explain risky operations before attempting them.',
       memory ? `Project MEMORY.md:\n${memory.slice(0, 20_000)}` : '',
       user ? `Workspace USER.md:\n${user.slice(0, 8_000)}` : '',
@@ -309,10 +359,50 @@ export class GeminiAgentProcess extends EventEmitter {
         return { ok: true, output: entries.map((entry) => `${entry.isDirectory() ? 'dir ' : 'file'}\t${entry.name}`).join('\n').slice(0, 50_000) }
       }
       if (name === 'run_command') return await this.runCommand(String(args.command ?? ''))
+      if (name === 'dashboard_delegate_worker') return await this.delegateWorker(args)
       return { ok: false, error: `Unknown tool: ${name}` }
     } catch (error) {
       return { ok: false, error: errorMessage(error) }
     }
+  }
+
+  private async delegateWorker(args: Record<string, unknown>): Promise<{ ok: true; output: string } | { ok: false; error: string }> {
+    if (!this.options.workerDelegate) return { ok: false, error: 'Worker delegation is not available' }
+    const providerId = typeof args.providerId === 'string' ? args.providerId : undefined
+    const mode = typeof args.mode === 'string' ? args.mode : ''
+    const prompt = typeof args.prompt === 'string' ? args.prompt.trim() : ''
+    if (providerId && !(workerProviderIds as readonly string[]).includes(providerId)) return { ok: false, error: `Unknown worker provider: ${providerId}` }
+    if (!(workerModes as readonly string[]).includes(mode)) return { ok: false, error: 'Worker mode must be research, review, or implement' }
+    if (!prompt) return { ok: false, error: 'Worker prompt is required' }
+
+    const rawBounds = args.bounds && typeof args.bounds === 'object' ? args.bounds as Record<string, unknown> : undefined
+    const numberInRange = (value: unknown, minimum: number, maximum: number): number | undefined =>
+      typeof value === 'number' && Number.isFinite(value) ? Math.min(maximum, Math.max(minimum, value)) : undefined
+    const turnLimit = numberInRange(rawBounds?.turnLimit, 1, 30)
+    const timeoutMinutes = numberInRange(rawBounds?.timeoutMinutes, 1, 30)
+    const resultLimitKb = numberInRange(rawBounds?.resultLimitKb, 1, 64)
+    const bounds = rawBounds ? {
+      ...(turnLimit !== undefined ? { turnLimit } : {}),
+      ...(timeoutMinutes !== undefined ? { timeoutMs: timeoutMinutes * 60_000 } : {}),
+      ...(resultLimitKb !== undefined ? { resultLimitBytes: resultLimitKb * 1024 } : {}),
+    } : undefined
+
+    const task = await this.options.workerDelegate({
+      ...(providerId ? { providerId: providerId as GeminiWorkerDelegateInput['providerId'] } : {}),
+      mode: mode as GeminiWorkerDelegateInput['mode'],
+      prompt,
+      ...(bounds ? { bounds } : {}),
+    })
+    const summary = {
+      taskId: task.id,
+      status: task.status,
+      sessionId: task.sessionId,
+      result: task.result,
+      resultTruncated: task.resultTruncated,
+      changedFiles: task.changedFiles,
+      error: task.error,
+    }
+    return { ok: true, output: JSON.stringify(summary, null, 2) }
   }
 
   private async runCommand(command: string): Promise<{ ok: true; output: string } | { ok: false; error: string }> {
