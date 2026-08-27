@@ -64,7 +64,7 @@ export function ProjectsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
           }}>
             <strong style={{ fontSize: '13px', color: 'var(--text)' }}>＋ Create New Sandboxed Project</strong>
             <p style={{ margin: 0, fontSize: '11px', color: 'var(--muted)' }}>
-              Creates a dedicated project folder inside <code>{data?.rootDir || 'Pi-Dashboards'}</code> with starter memory.
+              Creates a dedicated project folder inside <code>{data?.rootDir || 'Foci Dashboards'}</code> with starter memory.
             </p>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px auto', gap: '8px' }}>

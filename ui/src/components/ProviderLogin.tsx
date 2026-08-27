@@ -28,10 +28,10 @@ export function ProviderLogin() {
     void apiFetch('/api/provider-login/status')
       .then(async (response) => {
         const body = await response.json() as ProviderStatus & { error?: string }
-        if (!response.ok) throw new Error(body.error ?? 'Unable to inspect Pi login')
+        if (!response.ok) throw new Error(body.error ?? 'Unable to inspect Gemini login')
         setStatus(body)
       })
-      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Unable to inspect Pi login'))
+      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : 'Unable to inspect Gemini login'))
   }, [])
 
   useEffect(() => {
@@ -76,7 +76,7 @@ export function ProviderLogin() {
 
     connection.onopen = () => {
       resize()
-      terminal.writeln('\x1b[38;5;245mConnected to Pi provider login.\x1b[0m\r\n')
+      terminal.writeln('\x1b[38;5;245mConnected to Gemini provider login.\x1b[0m\r\n')
     }
 
     connection.onmessage = (event) => {
@@ -86,10 +86,10 @@ export function ProviderLogin() {
       const found = linkBuffer.match(/https?:\/\/[^\s\x1b<>"']+/g) ?? []
       if (found.length) setLinks((current) => [...new Set([...current, ...found])].slice(-3))
     }
-    connection.onerror = () => setError('The embedded Pi login console could not connect.')
+    connection.onerror = () => setError('The embedded Gemini login console could not connect.')
     connection.onclose = (event) => {
       socket.current = null
-      if (event.code !== 1000) setError(event.reason || 'The embedded Pi login console closed unexpectedly.')
+      if (event.code !== 1000) setError(event.reason || 'The embedded Gemini login console closed unexpectedly.')
     }
     const input = terminal.onData((data) => {
       if (connection.readyState === WebSocket.OPEN) connection.send(data)
@@ -110,12 +110,12 @@ export function ProviderLogin() {
     try {
       const response = await apiFetch('/api/provider-login/complete', { method: 'POST' })
       const body = await response.json() as ProviderStatus & { error?: string }
-      if (!response.ok) throw new Error(body.error ?? 'Unable to refresh Pi after login')
+      if (!response.ok) throw new Error(body.error ?? 'Unable to refresh Gemini after login')
       socket.current?.close()
       setConsoleOpen(false)
       setStatus(body)
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to refresh Pi after login')
+      setError(reason instanceof Error ? reason.message : 'Unable to refresh Gemini after login')
     } finally {
       setBusy(false)
     }
@@ -124,19 +124,19 @@ export function ProviderLogin() {
   const connected = Boolean(status?.providers.length)
   return <div className="provider-login">
     <div className={`provider-login__status ${connected ? 'is-connected' : ''}`}>
-      <div><strong>{connected ? 'Pi is connected' : 'Connect Pi to an AI provider'}</strong><p>{connected ? `${status?.providers.join(', ')} · ${status?.modelCount} models available` : 'Pi will guide you through its supported provider login without opening a host terminal.'}</p></div>
+      <div><strong>{connected ? 'Gemini is connected' : 'Connect Gemini to an AI provider'}</strong><p>{connected ? `${status?.providers.join(', ')} · ${status?.modelCount} models available` : 'Gemini will guide you through its supported provider login without opening a host terminal.'}</p></div>
       <span>{connected ? 'Connected' : 'Not connected'}</span>
     </div>
 
-    {!consoleOpen && <button className="button button--primary" type="button" onClick={() => { setError(''); setLinks([]); setConsoleOpen(true) }}>{connected ? 'Sign in to another provider' : 'Start Pi login'}</button>}
+    {!consoleOpen && <button className="button button--primary" type="button" onClick={() => { setError(''); setLinks([]); setConsoleOpen(true) }}>{connected ? 'Sign in to another provider' : 'Start Gemini login'}</button>}
 
     {consoleOpen && <>
-      <p className="provider-login__help">The <code>/login</code> command has been started for you. Choose a provider below and follow Pi’s prompts.</p>
-      <div className="provider-login__terminal" ref={host} aria-label="Pi provider login console" />
+      <p className="provider-login__help">The <code>/login</code> command has been started for you. Choose a provider below and follow Gemini’s prompts.</p>
+      <div className="provider-login__terminal" ref={host} aria-label="Gemini provider login console" />
       {links.length > 0 && <div className="provider-login__links"><strong>Provider sign-in links</strong>{links.map((link) => <a href={link} target="_blank" rel="noreferrer" key={link}>Open provider sign-in ↗</a>)}</div>}
-      <div className="provider-login__actions"><button className="button button--quiet" type="button" disabled={busy} onClick={() => setConsoleOpen(false)}>Cancel</button><button className="button button--primary" type="button" disabled={busy} onClick={() => void finishLogin()}>{busy ? 'Refreshing Pi…' : 'I’ve finished signing in'}</button></div>
+      <div className="provider-login__actions"><button className="button button--quiet" type="button" disabled={busy} onClick={() => setConsoleOpen(false)}>Cancel</button><button className="button button--primary" type="button" disabled={busy} onClick={() => void finishLogin()}>{busy ? 'Refreshing Gemini…' : 'I’ve finished signing in'}</button></div>
     </>}
     {error && <div className="form-error">{error}</div>}
-    <p className="provider-login__note">Provider credentials remain in Dashboard’s private Pi data volume. The isolated project terminal still cannot access them.</p>
+    <p className="provider-login__note">Provider credentials remain in Dashboard’s private Gemini data volume. The isolated project terminal still cannot access them.</p>
   </div>
 }

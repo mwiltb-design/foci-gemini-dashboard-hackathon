@@ -116,13 +116,14 @@ const originsLimitedToLocalhost = [...allowedOrigins].every((origin) => {
   try { return ['localhost', '127.0.0.1', '::1'].includes(new URL(origin).hostname) } catch { return false }
 })
 
-const auth = new DashboardAuth(remoteAccess.getToken())
+const auth = new DashboardAuth(process.env.PI_DASHBOARD_AUTH_TOKEN?.trim() || remoteAccess.getToken())
 const pluginAssetCapability = randomBytes(32).toString('base64url')
 const workerInternalToken = randomBytes(32).toString('base64url')
 const profile = dashboardProfile()
 const enabledFeatures = new Set<DashboardFeature>(profile.features)
 let rpcArgs = ['--mode', 'rpc', '--continue', '--name', 'Pi Dashboard', '--extension', runtimeInfoExtension, '--extension', curatedMemoryExtension, '--extension', memoryCheckpointExtension, '--extension', pluginToolsExtension, ...(enabledFeatures.has('workers') ? ['--extension', workersExtension] : []), ...(rpcSessionDir ? ['--session-dir', rpcSessionDir] : [])]
 const useGeminiAgent = (process.env.FOCI_AGENT_PROVIDER ?? process.env.PI_DASHBOARD_AGENT_PROVIDER ?? '').toLowerCase() === 'gemini'
+const defaultWorkerProviderId = useGeminiAgent ? 'gemini-worker' : 'sub-pi'
 let rpc = registerRpcListeners(useGeminiAgent
   ? new GeminiAgentProcess({ cwd: workspace, sessionDir: rpcSessionDir, workerDelegate: delegateWorker })
   : new PiRpcProcess({
@@ -192,6 +193,7 @@ let workers = new WorkerCoordinator({
   adapters: [geminiWorker, subPi, antigravityWorker, codexWorker, claudeWorker],
   rulesService: workerRules,
   bounds: workerBounds,
+  defaultProviderId: defaultWorkerProviderId,
   primaryDefaults: async () => {
     const snapshot = await state()
     const model = snapshot.model && typeof snapshot.model === 'object' ? snapshot.model as Record<string, unknown> : undefined
@@ -253,7 +255,7 @@ async function state(): Promise<Record<string, unknown>> {
 }
 
 async function delegateWorker(input: GeminiWorkerDelegateInput): Promise<GeminiWorkerDelegateResult> {
-  const started = await workers.start(input)
+  const started = await workers.start({ ...input, providerId: input.providerId ?? defaultWorkerProviderId })
   const deadline = Date.now() + started.bounds.timeoutMs + 10_000
   let task = started
   while ((task.status === 'queued' || task.status === 'running') && Date.now() < deadline) {
@@ -725,7 +727,7 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
     if (request.method === 'POST' && url.pathname === '/internal/workers/tasks') {
       const body = await readJsonBody(request)
       json(response, 202, await workers.start({
-        providerId: typeof body.providerId === 'string' ? body.providerId : 'sub-pi',
+        providerId: typeof body.providerId === 'string' ? body.providerId : defaultWorkerProviderId,
         mode: typeof body.mode === 'string' ? body.mode : undefined,
         prompt: typeof body.prompt === 'string' ? body.prompt : undefined,
         bounds: body.bounds && typeof body.bounds === 'object' ? body.bounds as any : undefined,
@@ -766,6 +768,14 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
     record({ category: 'system', type: 'auth_logout', severity: 'info', summary: 'Dashboard session ended' })
     json(response, 200, { authenticated: false })
     return
+  }
+  if ((request.method === 'GET' || request.method === 'HEAD') && (url.pathname === '/api/health' || url.pathname === '/healthz')) {
+    json(response, rpc.running ? 200 : 503, { ok: rpc.running, workspace, provider: useGeminiAgent ? 'gemini' : 'pi' })
+    return
+  }
+  if ((request.method === 'GET' || request.method === 'HEAD') && !url.pathname.startsWith('/api/') && !url.pathname.startsWith('/internal/') && !url.pathname.startsWith('/plugin-assets/')) {
+    const served = await tryServeStaticUi(url.pathname, response, request.method === 'HEAD')
+    if (served) return
   }
   if (auth.enabled && !auth.authenticate(request)) {
     json(response, 401, { error: 'Authentication required' })
@@ -1405,8 +1415,8 @@ async function handleHttp(request: IncomingMessage, response: ServerResponse): P
     json(response, 200, { plugins: await plugins.listDetailed() })
     return
   }
-  if (url.pathname === '/api/health') {
-    json(response, rpc.running ? 200 : 503, { ok: rpc.running, workspace })
+  if (url.pathname === '/api/health' || url.pathname === '/healthz') {
+    json(response, rpc.running ? 200 : 503, { ok: rpc.running, workspace, provider: useGeminiAgent ? 'gemini' : 'pi' })
     return
   }
   if (url.pathname === '/api/system') {

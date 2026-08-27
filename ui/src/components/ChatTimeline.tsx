@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { ChatItem } from '../hooks/usePiChat'
+import { FociLogo } from './FociLogo'
 
 function formatArgs(args: unknown): string {
   if (args === undefined || args === null) return ''
@@ -22,9 +23,9 @@ export function ChatTimeline({ items, running }: { items: ChatItem[]; running: b
   if (items.length === 0) {
     return (
       <div className="chat-empty">
-        <span className="brand-mark">π</span>
-        <h2>Start a Pi conversation</h2>
-        <p>This session runs locally in the dashboard backend. Pi can read and modify files in the dashboard project.</p>
+        <FociLogo size={44} className="brand-mark" />
+        <h2>Start a Gemini conversation</h2>
+        <p>This session runs locally in the dashboard backend. Gemini can read and modify files in the dashboard project.</p>
       </div>
     )
   }
@@ -35,7 +36,7 @@ export function ChatTimeline({ items, running }: { items: ChatItem[]; running: b
         if (item.type === 'message') {
           return (
             <article className={`message message--${item.role}`} key={item.id}>
-              <small>{item.role === 'assistant' ? 'Pi' : 'You'}</small>
+              <small>{item.role === 'assistant' ? 'Gemini' : 'You'}</small>
               {item.thinking && <details className="thinking"><summary>Thinking</summary><p>{item.thinking}</p></details>}
               <div className="markdown"><ReactMarkdown remarkPlugins={[remarkGfm]}>{item.text || (item.role === 'assistant' && running ? '…' : '')}</ReactMarkdown></div>
               {item.error && <span className="message__error">{item.error}</span>}

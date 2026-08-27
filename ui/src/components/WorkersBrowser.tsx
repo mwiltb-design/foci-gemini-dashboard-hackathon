@@ -34,7 +34,7 @@ export function WorkersBrowser({ onOpenSession }: { onOpenSession: (sessionId: s
   const system = useSystemStatus()
 
   const [activeTab, setActiveTab] = useState<'tasks' | 'rules'>('tasks')
-  const [selectedProviderId, setSelectedProviderId] = useState('sub-pi')
+  const [selectedProviderId, setSelectedProviderId] = useState('gemini-worker')
   const [mode, setMode] = useState<WorkerMode>('research')
   const [selectedModelKey, setSelectedModelKey] = useState('default')
   const [selectedThinking, setSelectedThinking] = useState('default')
@@ -234,7 +234,7 @@ export function WorkersBrowser({ onOpenSession }: { onOpenSession: (sessionId: s
           <div className="worker-provider-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
             {providers.map((provider) => {
               const isSubPi = provider.id === 'sub-pi'
-              const mark = isSubPi ? 'π' : provider.id === 'antigravity-cli' ? '⚡' : provider.id === 'codex-cli' ? '⌥' : '✦'
+              const mark = isSubPi ? '✦' : provider.id === 'antigravity-cli' ? '⚡' : provider.id === 'codex-cli' ? '⌥' : '✦'
 
               return (
                 <article className={`worker-provider worker-provider--${provider.status}`} key={provider.id} style={{ position: 'relative' }}>
@@ -320,7 +320,7 @@ export function WorkersBrowser({ onOpenSession }: { onOpenSession: (sessionId: s
                   <h2>Delegate to {currentProvider?.name ?? 'Worker'}</h2>
                   <p>
                     {currentProvider?.id === 'sub-pi'
-                      ? 'Sub PI executes in a separate Pi session. Primary PI receives only the bounded result.'
+                      ? 'Gemini worker executes in a separate Foci session. Primary agent receives only the bounded result.'
                       : currentProvider?.id === 'antigravity-cli'
                         ? 'Antigravity CLI executes with full reasoning and workspace permissions (research, review, implement).'
                         : `${currentProvider?.name} runs bounded in the workspace and returns structured findings.`}
@@ -349,7 +349,7 @@ export function WorkersBrowser({ onOpenSession }: { onOpenSession: (sessionId: s
                         fontWeight: selectedProviderId === p.id ? 'bold' : 'normal',
                       }}
                     >
-                      {p.id === 'sub-pi' ? 'π ' : p.id === 'antigravity-cli' ? '⚡ ' : '⌥ '}{p.name}
+                      {p.id === 'sub-pi' ? '✦ ' : p.id === 'antigravity-cli' ? '⚡ ' : '⌥ '}{p.name}
                     </button>
                   ))}
                 </div>
@@ -371,18 +371,18 @@ export function WorkersBrowser({ onOpenSession }: { onOpenSession: (sessionId: s
                 ))}
               </div>
 
-              {/* Sub-PI Model and Thinking Selectors */}
+              {/* Worker model and thinking selectors */}
               {selectedProviderId === 'sub-pi' && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px', marginTop: '10px', marginBottom: '8px' }}>
                   <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px', color: 'var(--muted)' }}>
-                    <span>Assigned Model for Sub-PI:</span>
+                    <span>Assigned model:</span>
                     <select
                       value={selectedModelKey}
                       onChange={(e) => setSelectedModelKey(e.target.value)}
                       disabled={active || workers.busy || currentProvider?.status !== 'ready'}
                       style={{ padding: '8px 10px', background: 'var(--field)', color: 'var(--text)', border: '1px solid var(--line)', borderRadius: '7px', font: '11px sans-serif' }}
                     >
-                      <option value="default">⚡ Same as Primary Pi (Default)</option>
+                      <option value="default">⚡ Same as Primary agent (Default)</option>
                       {[...groupedModels.entries()].map(([provider, models]) => (
                         <optgroup label={provider} key={provider}>
                           {models.map((model) => (
@@ -480,7 +480,7 @@ export function WorkersBrowser({ onOpenSession }: { onOpenSession: (sessionId: s
                   maxLength={12000}
                   value={prompt}
                   onChange={(event) => setPrompt(event.target.value)}
-                  placeholder={`Describe a narrow task for ${currentProvider?.name ?? 'the worker'} and the concise deliverable Primary PI should receive…`}
+                  placeholder={`Describe a narrow task for ${currentProvider?.name ?? 'the worker'} and the concise deliverable Primary agent should receive…`}
                   disabled={active || workers.busy || currentProvider?.status !== 'ready'}
                 />
               </label>
@@ -711,7 +711,7 @@ export function WorkersBrowser({ onOpenSession }: { onOpenSession: (sessionId: s
                         <footer>
                           {selectedTask.sessionId ? (
                             <button className="button button--quiet" type="button" onClick={() => onOpenSession(selectedTask.sessionId!)}>
-                              Open saved Sub PI session ↗
+                              Open saved Gemini worker session ↗
                             </button>
                           ) : (
                             <span>Native CLI execution complete.</span>

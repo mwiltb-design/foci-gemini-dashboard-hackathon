@@ -67,7 +67,7 @@ export function RemoteAccessCard() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '12px' }}>
         <p style={{ margin: 0, fontSize: '13px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-          Securely access your Pi Dashboard from your phone or laptop over your private Tailnet without exposing ports to the public internet.
+          Securely access your Foci Dashboard from your phone or laptop over your private Tailnet without exposing ports to the public internet.
         </p>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>

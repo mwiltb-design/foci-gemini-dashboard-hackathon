@@ -50,9 +50,11 @@ docker run --rm -p 8080:8080 \
   foci-dashboard:test
 ```
 
-Then open `http://127.0.0.1:8080`.
+Then open `http://127.0.0.1:8080`. Health checks are available at `/api/health` and `/healthz`.
 
 ## Cloud Run deploy draft
+
+For the fastest hackathon deployment, deploy from the local source tree with `gcloud run deploy --source .`. GitHub-connected Cloud Run deployment also works, but only after committing and pushing this hackathon branch/repository; until then it will not include local-only commits or UI polish.
 
 Create the API-key secret once, then grant the Cloud Run service identity access to it. This example creates the secret from a local prompt without putting the key in the image or deployment command:
 
@@ -69,12 +71,16 @@ gcloud run deploy foci-dashboard \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
-  --min-instances 0 \
-  --memory 1Gi \
-  --set-env-vars FOCI_AGENT_PROVIDER=gemini,GEMINI_MODEL=gemini-3.5-flash,GEMINI_WORKER_MODEL=gemini-3.5-flash \
+  --min-instances 1 \
+  --max-instances 3 \
+  --memory 2Gi \
+  --cpu 1 \
+  --timeout 3600 \
+  --port 8080 \
+  --set-env-vars FOCI_AGENT_PROVIDER=gemini,GEMINI_MODEL=gemini-3.5-flash,GEMINI_WORKER_MODEL=gemini-3.5-flash,NODE_ENV=production \
   --set-secrets GEMINI_API_KEY=GEMINI_API_KEY:latest
 ```
 
-For an authenticated deployment, remove `--allow-unauthenticated`. If dashboard-level token authentication is also required, store `PI_DASHBOARD_AUTH_TOKEN` as a separate Secret Manager secret and add it to `--set-secrets` rather than placing it in `.env` or `--set-env-vars`.
+For Google-authenticated access, remove `--allow-unauthenticated`. For simple dashboard password protection on a public demo URL, store `PI_DASHBOARD_AUTH_TOKEN` as a separate Secret Manager secret and add it to `--set-secrets` rather than placing it in `.env` or `--set-env-vars`; the static login UI and health probes remain reachable before token login.
 
 If the hackathon publishes a different exact Gemini 3.5 model ID, update `GEMINI_MODEL` and `GEMINI_WORKER_MODEL`.

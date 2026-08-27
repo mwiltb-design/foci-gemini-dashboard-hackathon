@@ -18,7 +18,7 @@ export function ChatView({ chat }: { chat: PiChatController }) {
   const [draft, setDraft] = useState('')
   const busy = chat.running || chat.pendingCommand
   const model = chat.state.model
-  const connectionLabel = chat.connection === 'connected' ? 'Pi connected' : chat.connection
+  const connectionLabel = chat.connection === 'connected' ? 'Gemini Live' : chat.connection
 
   useEffect(() => {
     if (!chat.composerPrefill) return
@@ -49,7 +49,7 @@ export function ChatView({ chat }: { chat: PiChatController }) {
     : `${context.percent.toFixed(1)}% context${context.tokens != null && context.contextWindow ? ` - ${context.tokens.toLocaleString()} / ${context.contextWindow.toLocaleString()} tokens` : ''}`
 
   function startNewSession() {
-    if (busy || !window.confirm('Start a new Pi session? The current session will remain saved.')) return
+    if (busy || !window.confirm('Start a new Foci session? The current session will remain saved.')) return
     chat.newSession()
   }
 
@@ -57,7 +57,7 @@ export function ChatView({ chat }: { chat: PiChatController }) {
     <>
       <Panel
         eyebrow="Conversation"
-        title={chat.state.sessionName || 'Pi Dashboard'}
+        title={chat.state.sessionName || 'Foci Dashboard'}
         action={<Chip tone={chat.connection === 'connected' ? 'accent' : 'warning'}>{connectionLabel}</Chip>}
         className="chat-panel"
       >
@@ -70,7 +70,7 @@ export function ChatView({ chat }: { chat: PiChatController }) {
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={handleComposerKeyDown}
-            placeholder={chat.connection === 'connected' ? 'Ask Pi about this project...' : 'Waiting for the local backend...'}
+            placeholder={chat.connection === 'connected' ? 'Ask Gemini about this project...' : 'Waiting for the local backend...'}
             rows={2}
             disabled={chat.connection !== 'connected' || busy}
           />

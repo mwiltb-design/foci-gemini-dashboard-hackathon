@@ -47,7 +47,7 @@ export function usePlugins(enabled: boolean) {
     const response = await apiFetch(`/api/plugins/${encodeURIComponent(id)}/agent-access`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(access),
     })
-    const body = await responseBody<PluginSummary>(response, 'Unable to update Pi access')
+    const body = await responseBody<PluginSummary>(response, 'Unable to update Gemini access')
     setPlugins((current) => current.map((plugin) => plugin.id === id ? body : plugin))
   }, [])
 

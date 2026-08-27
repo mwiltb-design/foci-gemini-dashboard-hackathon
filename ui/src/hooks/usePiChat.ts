@@ -239,7 +239,7 @@ export function usePiChat() {
       case 'extension_ui_request': {
         const method = event.method
         if (method === 'notify') {
-          appendNotice(String(event.message ?? 'Pi notification'), event.notifyType === 'error' ? 'error' : event.notifyType === 'warning' ? 'warning' : 'info')
+          appendNotice(String(event.message ?? 'Foci notification'), event.notifyType === 'error' ? 'error' : event.notifyType === 'warning' ? 'warning' : 'info')
         } else if (method === 'select' || method === 'confirm' || method === 'input' || method === 'editor') {
           setUiRequest(event as unknown as ExtensionUiRequest)
         }
@@ -249,7 +249,7 @@ export function usePiChat() {
         appendNotice(`Retrying after an error (attempt ${String(event.attempt ?? '')})`, 'warning')
         break
       case 'compaction_start':
-        appendNotice('Pi is compacting the session context.', 'info')
+        appendNotice('Gemini is compacting the session context.', 'info')
         break
       case 'extension_error':
         appendNotice(String(event.error ?? 'An extension failed'), 'error')
@@ -289,7 +289,7 @@ export function usePiChat() {
         if (envelope.type === 'connection') {
           if (envelope.status === 'error') {
             setConnection('error')
-            setConnectionError(envelope.message ?? 'Pi backend failed to start')
+            setConnectionError(envelope.message ?? 'Foci backend failed to start')
           }
         } else if (envelope.type === 'state' && envelope.state) {
           setState(envelope.state)
@@ -338,7 +338,7 @@ export function usePiChat() {
           .catch(() => { if (!disposed) scheduleReconnect() })
       })
       socket.addEventListener('error', () => {
-        setConnectionError('Cannot reach the local Pi backend')
+        setConnectionError('Cannot reach the local Foci backend')
       })
     }
 

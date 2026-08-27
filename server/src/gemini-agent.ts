@@ -72,7 +72,7 @@ const toolDeclarations: FunctionDeclaration[] = [
     parameters: {
       type: Type.OBJECT,
       properties: {
-        providerId: { type: Type.STRING, enum: [...workerProviderIds], description: 'Worker provider. Defaults to sub-pi.' },
+        providerId: { type: Type.STRING, enum: [...workerProviderIds], description: 'Worker provider. Defaults to the cloud-native Gemini worker.' },
         mode: { type: Type.STRING, enum: [...workerModes], description: 'Worker task mode.' },
         prompt: { type: Type.STRING, description: 'Complete bounded task and expected deliverable.' },
         bounds: {

@@ -96,7 +96,7 @@ function DashboardApp({ config }: { config: DashboardConfig }) {
   }, [config.profile, view, pluginRegistry.loading, pluginRegistry.plugins])
 
   useEffect(() => {
-    document.title = `${pluginsPage ? 'Plugins' : activePlugin?.name ?? viewMeta[view].title} · Pi Dashboard`
+    document.title = `${pluginsPage ? 'Plugins' : activePlugin?.name ?? viewMeta[view].title} · Foci Dashboard`
     window.scrollTo({ top: 0, behavior: 'instant' })
     if (view === 'terminal' && !activePlugin && !pluginsPage) setTerminalMounted(true)
   }, [view, activePlugin, pluginsPage])
@@ -275,7 +275,7 @@ function LoginScreen({ onAuthenticated }: { onAuthenticated: () => void }) {
   }
 
   return <main className="auth-screen"><form className="auth-card" onSubmit={login}>
-    <span className="eyebrow">Pi Dashboard</span>
+    <span className="eyebrow">Foci Dashboard</span>
     <h1>Sign in</h1>
     <p>Enter the dashboard access token configured for this server.</p>
     <label><span>Access token</span><input type="password" value={token} onChange={(event) => setToken(event.target.value)} autoComplete="current-password" autoFocus /></label>

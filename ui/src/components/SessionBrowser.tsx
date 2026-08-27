@@ -26,7 +26,7 @@ function SessionTimeline({ items, onFork }: { items: SessionTimelineItem[]; onFo
           return (
             <article className={`session-message session-message--${item.role}`} key={item.id}>
               <header>
-                <span>{item.role === 'assistant' ? 'Pi' : 'You'}</span>
+                <span>{item.role === 'assistant' ? 'Gemini' : 'You'}</span>
                 <time>{dateTime(item.timestamp)}</time>
               </header>
               {item.thinking && <details><summary>Thinking</summary><p>{item.thinking}</p></details>}
@@ -77,7 +77,7 @@ export function SessionBrowser({ chat, onOpenChat }: SessionBrowserProps) {
   }
 
   function newSession() {
-    if (busy || !window.confirm('Start a new Pi session? The current session will remain saved.')) return
+    if (busy || !window.confirm('Start a new Foci session? The current session will remain saved.')) return
     chat.newSession()
     onOpenChat()
   }
@@ -118,7 +118,7 @@ export function SessionBrowser({ chat, onOpenChat }: SessionBrowserProps) {
   }
 
   async function archiveSession() {
-    if (!selected || selected.id === browser.currentSessionId || !window.confirm(`Archive “${selected.name}” from the Dashboard list? Its Pi transcript will be kept.`)) return
+    if (!selected || selected.id === browser.currentSessionId || !window.confirm(`Archive “${selected.name}” from the Dashboard list? Its Foci transcript will be kept.`)) return
     try {
       await browser.setArchived(selected.id, true)
       browser.setSelectedId(browser.sessions.find((session) => session.id !== selected.id)?.id)

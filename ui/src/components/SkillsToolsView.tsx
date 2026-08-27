@@ -16,13 +16,13 @@ export function SkillsToolsView({ revision, plugins, onCreateWithPi }: {
     <>
       <nav className="capability-tabs" aria-label="Skills and tools">
         <button className={tab === 'installed-skills' ? 'is-active' : ''} type="button" onClick={() => setTab('installed-skills')}>
-          <span>✓</span><strong>Installed Skills</strong><em>Available to PI now</em>
+          <span>✓</span><strong>Installed Skills</strong><em>Available to Gemini now</em>
         </button>
         <button className={tab === 'available-skills' ? 'is-active' : ''} type="button" onClick={() => setTab('available-skills')}>
           <span>✦</span><strong>Available Skills</strong><em>Discoverable, not usable</em>
         </button>
         <button className={tab === 'active-tools' ? 'is-active' : ''} type="button" onClick={() => setTab('active-tools')}>
-          <span>●</span><strong>Active Tools</strong><em>Exposed to PI now</em>
+          <span>●</span><strong>Active Tools</strong><em>Exposed to Gemini now</em>
         </button>
         <button className={tab === 'available-tools' ? 'is-active' : ''} type="button" onClick={() => setTab('available-tools')}>
           <span>○</span><strong>Available Tools</strong><em>Registered or dependency-gated</em>

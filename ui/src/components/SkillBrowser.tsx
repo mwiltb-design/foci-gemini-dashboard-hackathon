@@ -27,7 +27,7 @@ type SkillDestination = 'personal' | 'project' | 'plugin'
 type ReviewDestination = 'user' | 'project' | 'plugin'
 
 const destinationDetails: Record<SkillDestination, { label: string; path: string; description: string }> = {
-  personal: { label: 'Personal', path: 'PI private storage · skills/<name>', description: 'Available across projects after activation.' },
+  personal: { label: 'Personal', path: 'Foci private storage · skills/<name>', description: 'Available across projects after activation.' },
   project: { label: 'Project', path: '.pi/skills/<name>', description: 'Stored with this project and optionally version-controlled.' },
   plugin: { label: 'Plugin', path: '<plugin>/skills/<name>', description: 'Immutable and controlled by a trusted bundled plugin.' },
 }
@@ -53,7 +53,7 @@ function SkillApprovalDialog({ review, destination, pluginId, busy, error, onAdo
   async function approve() {
     if (!confirmed || !review.valid) return
     if (destination === 'plugin') {
-      if (onCreateWithPi(`The user reviewed and approved the skill draft at ${review.sourcePath}. Use the dashboard-plugin-authoring skill to add it to the trusted bundled plugin ${pluginId || 'identified by the draft path'}. Re-check the draft, copy it into the plugin's immutable skills/<skill-name> package, declare it in plugin.json agent.skills, classify any read/write dependency honestly, and run the focused plugin contract tests. Remove the draft only after the plugin package is valid. Do not enable the plugin, grant PI access, commit, or push.`)) onClose()
+      if (onCreateWithPi(`The user reviewed and approved the skill draft at ${review.sourcePath}. Use the dashboard-plugin-authoring skill to add it to the trusted bundled plugin ${pluginId || 'identified by the draft path'}. Re-check the draft, copy it into the plugin's immutable skills/<skill-name> package, declare it in plugin.json agent.skills, classify any read/write dependency honestly, and run the focused plugin contract tests. Remove the draft only after the plugin package is valid. Do not enable the plugin, grant Gemini access, commit, or push.`)) onClose()
       return
     }
     if (await onAdopt(review, destination)) onClose()
@@ -75,8 +75,8 @@ function SkillApprovalDialog({ review, destination, pluginId, busy, error, onAdo
           <section className="skill-review-instructions"><span className="eyebrow">Skill instructions</span><div className="skill-review-content markdown"><ReactMarkdown remarkPlugins={[remarkGfm]}>{withoutFrontmatter(review.content)}</ReactMarkdown></div></section>
           <section className="skill-review-file-section"><span className="eyebrow">Files included</span><div className="skill-review-files">{review.files.map((file) => <div key={file.path}><span>{file.path}</span><em>{file.executable ? 'executable · ' : ''}{size(file.size)}</em></div>)}</div></section>
         </div>
-        <div className="skill-install-result"><strong>Approval destination</strong><span>{destinationDetails[displayDestination].label} · {destinationDetails[displayDestination].path}</span><small>{destination === 'plugin' ? 'Approval starts a new PI chat to integrate and validate the immutable plugin package.' : 'Approval installs the skill inactive in Available Skills. Activate it separately when you are ready.'}</small></div>
-        <label className="skill-confirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>I reviewed the instructions and bundled files. I understand that skills can direct PI to run commands or modify files.</span></label>
+        <div className="skill-install-result"><strong>Approval destination</strong><span>{destinationDetails[displayDestination].label} · {destinationDetails[displayDestination].path}</span><small>{destination === 'plugin' ? 'Approval starts a new Gemini chat to integrate and validate the immutable plugin package.' : 'Approval installs the skill inactive in Available Skills. Activate it separately when you are ready.'}</small></div>
+        <label className="skill-confirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} /><span>I reviewed the instructions and bundled files. I understand that skills can direct Gemini to run commands or modify files.</span></label>
       </div>
       <footer className="dialog__actions skill-review-actions">
         {onBack && <button className="button button--quiet" type="button" onClick={onBack}>Back</button>}
@@ -137,9 +137,9 @@ function AddSkillDialog({ busy, error, onReview, onAdopt, onCreateWithPi, plugin
       <section className="dialog skill-import-dialog skill-add-dialog" role="dialog" aria-modal="true" aria-labelledby="skill-add-title">
         <span className="eyebrow">Create or import safely</span>
         <h2 id="skill-add-title">Add a skill</h2>
-        <p>Skills are reviewed instruction packages. New personal and project skills are installed inactive; plugin skills follow the plugin lifecycle and PI access grants.</p>
+        <p>Skills are reviewed instruction packages. New personal and project skills are installed inactive; plugin skills follow the plugin lifecycle and Gemini access grants.</p>
         <div className="skill-add-choices">
-          <button type="button" onClick={() => setMode('describe')}><span>✦</span><strong>Describe a skill</strong><small>Tell PI what workflow you want and where it belongs.</small></button>
+          <button type="button" onClick={() => setMode('describe')}><span>✦</span><strong>Describe a skill</strong><small>Tell Gemini what workflow you want and where it belongs.</small></button>
           <button type="button" onClick={() => setMode('import')}><span>⌁</span><strong>Use an outside source</strong><small>Review a local package or reproduce a repository or web reference.</small></button>
         </div>
         <div className="dialog__actions"><button className="button button--quiet" type="button" onClick={onClose}>Cancel</button></div>
@@ -162,11 +162,11 @@ function AddSkillDialog({ busy, error, onReview, onAdopt, onCreateWithPi, plugin
   return (
     <div className="dialog-backdrop">
       <section className="dialog skill-import-dialog" role="dialog" aria-modal="true" aria-labelledby="skill-import-title">
-        <span className="eyebrow">{mode === 'describe' ? 'Build with PI' : 'Review before adopting'}</span>
+        <span className="eyebrow">{mode === 'describe' ? 'Build with Gemini' : 'Review before adopting'}</span>
         <h2 id="skill-import-title">{mode === 'describe' ? 'Describe a skill' : 'Use an outside source'}</h2>
         {error && <div className="connection-banner">{error}</div>}
         {mode === 'describe' ? <>
-          <label className="skill-add-field"><span>What should the skill help PI do?</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Review a project release and prepare a concise readiness report…" rows={5} autoFocus /></label>
+          <label className="skill-add-field"><span>What should the skill help Gemini do?</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Review a project release and prepare a concise readiness report…" rows={5} autoFocus /></label>
           <label className="skill-add-field"><span>Optional repository or website reference</span><input value={reference} onChange={(event) => setReference(event.target.value)} placeholder="https://github.com/owner/example or https://example.com" /></label>
           <span className="eyebrow skill-destination-label">Where should it live?</span>
           {destinationPicker}
@@ -177,11 +177,11 @@ function AddSkillDialog({ busy, error, onReview, onAdopt, onCreateWithPi, plugin
           <div className="dialog__actions">
             <button className="button button--quiet" type="button" onClick={() => setMode('choose')}>Back</button>
             <button className="button button--quiet" type="button" onClick={onClose}>Cancel</button>
-            <button className="button button--primary" type="button" disabled={!description.trim()} onClick={() => createWithPi('build')}>Start new Chat with PI</button>
+            <button className="button button--primary" type="button" disabled={!description.trim()} onClick={() => createWithPi('build')}>Start new Chat with Gemini</button>
           </div>
         </> : (
           <>
-            <p>Enter a folder inside <code>/workspace</code> containing <code>SKILL.md</code>, or give PI a repository or website reference to reproduce safely.</p>
+            <p>Enter a folder inside <code>/workspace</code> containing <code>SKILL.md</code>, or give Gemini a repository or website reference to reproduce safely.</p>
             <form onSubmit={submitReview}>
               <input value={path} onChange={(event) => setPath(event.target.value)} placeholder="/workspace/my-skill or https://…" autoFocus />
               <span className="eyebrow skill-destination-label">Destination</span>
@@ -193,7 +193,7 @@ function AddSkillDialog({ busy, error, onReview, onAdopt, onCreateWithPi, plugin
               <div className="dialog__actions">
                 <button className="button button--quiet" type="button" onClick={() => setMode('choose')}>Back</button>
                 <button className="button button--quiet" type="button" onClick={onClose}>Cancel</button>
-                <button className="button button--primary" type="submit" disabled={busy || !path.trim()}>{destination === 'plugin' || /^https?:\/\//i.test(path.trim()) ? 'Start new Chat with PI' : 'Review files'}</button>
+                <button className="button button--primary" type="submit" disabled={busy || !path.trim()}>{destination === 'plugin' || /^https?:\/\//i.test(path.trim()) ? 'Start new Chat with Gemini' : 'Review files'}</button>
               </div>
             </form>
           </>
@@ -223,9 +223,9 @@ export function SkillBrowser({ revision, mode, plugins, onCreateWithPi }: {
 
   function toggle(skill: SkillSummary) {
     const warning = skill.enabled
-      ? `Disable “${skill.name}”? New Pi requests will no longer use it.`
-      : `Enable “${skill.name}”? Its instructions will become available to Pi.`
-    if (window.confirm(`${warning}\n\nPi will restart its local RPC process and preserve the current session.`)) void browser.toggle(skill)
+      ? `Disable “${skill.name}”? New Gemini requests will no longer use it.`
+      : `Enable “${skill.name}”? Its instructions will become available to Gemini.`
+    if (window.confirm(`${warning}\n\nGemini will restart its local RPC process and preserve the current session.`)) void browser.toggle(skill)
   }
 
   async function openFile(path: string) {
@@ -241,7 +241,7 @@ export function SkillBrowser({ revision, mode, plugins, onCreateWithPi }: {
   return (
     <>
       <Panel
-        eyebrow={installed ? 'PI instruction catalog' : 'Discoverable instruction packages'}
+        eyebrow={installed ? 'Gemini instruction catalog' : 'Discoverable instruction packages'}
         title={installed ? 'Installed Skills' : 'Available Skills'}
         action={installed
           ? <button className="button button--quiet" type="button" onClick={browser.refresh}>↻ Refresh</button>
@@ -250,14 +250,14 @@ export function SkillBrowser({ revision, mode, plugins, onCreateWithPi }: {
       >
         <div className="panel__body">
           <div className="metrics">
-            <div className="metric"><b>{String(browser.skills.length).padStart(2, '0')}</b><span>{installed ? 'PI-ready skills' : 'Not currently usable'}</span></div>
-            <div className="metric"><b>{String(installed ? usableCount : actionableCount).padStart(2, '0')}</b><span>{installed ? 'PI has access' : 'Activation paths'}</span></div>
+            <div className="metric"><b>{String(browser.skills.length).padStart(2, '0')}</b><span>{installed ? 'Gemini-ready skills' : 'Not currently usable'}</span></div>
+            <div className="metric"><b>{String(installed ? usableCount : actionableCount).padStart(2, '0')}</b><span>{installed ? 'Gemini has access' : 'Activation paths'}</span></div>
             <div className="metric"><b>{warningCount}</b><span>Warnings</span></div>
           </div>
           {browser.error && <div className="connection-banner">{browser.error}</div>}
           <div className="tools-explainer">
-            <strong>{installed ? 'These skills are available to PI now.' : 'These skills are discovered but unavailable to PI.'}</strong>
-            <span>{installed ? 'Disable a settings-managed skill to remove it from future PI requests.' : 'PI-built drafts appear here automatically for review. Reviewed installations remain inactive until you enable them.'}</span>
+            <strong>{installed ? 'These skills are available to Gemini now.' : 'These skills are discovered but unavailable to Gemini.'}</strong>
+            <span>{installed ? 'Disable a settings-managed skill to remove it from future Gemini requests.' : 'Gemini-built drafts appear here automatically for review. Reviewed installations remain inactive until you enable them.'}</span>
           </div>
           <div className="skills-browser">
             <section className="skills-list-pane">
@@ -267,7 +267,7 @@ export function SkillBrowser({ revision, mode, plugins, onCreateWithPi }: {
               </div>
               <div className="skills-list">
                 {browser.loading && <div className="skill-empty">Loading skills…</div>}
-                {!browser.loading && browser.filtered.length === 0 && <div className="skill-empty"><strong>{installed ? 'No installed skills found' : 'No available skills found'}</strong><span>{installed ? 'No discovered skill is currently usable by PI.' : 'Add a reviewed local skill when you are ready.'}</span></div>}
+                {!browser.loading && browser.filtered.length === 0 && <div className="skill-empty"><strong>{installed ? 'No installed skills found' : 'No available skills found'}</strong><span>{installed ? 'No discovered skill is currently usable by Gemini.' : 'Add a reviewed local skill when you are ready.'}</span></div>}
                 {browser.filtered.map((skill) => (
                   <button className={`skill-row ${browser.selectedId === skill.id ? 'is-selected' : ''}`} type="button" key={skill.id} onClick={() => browser.setSelectedId(skill.id)}>
                     <span className={`skill-state ${skill.enabled ? 'is-enabled' : ''}`}>{skill.enabled ? '✓' : '—'}</span>
@@ -286,7 +286,7 @@ export function SkillBrowser({ revision, mode, plugins, onCreateWithPi }: {
                     <button className={`skill-toggle ${selected.enabled ? 'is-enabled' : ''}`} type="button" role="switch" aria-checked={selected.enabled} disabled={browser.busy || !selected.canToggle || (!selected.valid && !selected.enabled)} onClick={() => toggle(selected)}><span />{selected.enabled ? 'Enabled' : 'Disabled'}</button>
                   </header>
                   <div className="skill-meta-strip">
-                    <Chip tone={selected.enabled ? 'accent' : 'neutral'}>{selected.enabled ? 'PI has access' : 'PI has no access'}</Chip>
+                    <Chip tone={selected.enabled ? 'accent' : 'neutral'}>{selected.enabled ? 'Gemini has access' : 'Gemini has no access'}</Chip>
                     <Chip>{selected.valid ? 'valid' : 'needs changes'}</Chip>
                     {selected.review && <Chip tone="warning">needs review</Chip>}
                     {selected.disableModelInvocation && <Chip>command only</Chip>}
@@ -296,7 +296,7 @@ export function SkillBrowser({ revision, mode, plugins, onCreateWithPi }: {
                   <div className="skill-catalog-status">
                     <div><span>Status</span><strong>{selected.status}</strong></div>
                     <div><span>Stored in</span><code>{selected.storageLocation}</code></div>
-                    {selected.plugin && <div><span>Plugin dependency</span><strong>{selected.plugin.name} · {selected.plugin.enabled ? 'enabled' : 'disabled'}{selected.plugin.access ? ` · PI ${selected.plugin.access} ${selected.plugin.granted ? 'granted' : 'not granted'}` : ''}</strong></div>}
+                    {selected.plugin && <div><span>Plugin dependency</span><strong>{selected.plugin.name} · {selected.plugin.enabled ? 'enabled' : 'disabled'}{selected.plugin.access ? ` · Gemini ${selected.plugin.access} ${selected.plugin.granted ? 'granted' : 'not granted'}` : ''}</strong></div>}
                     {selected.plugin && <button className="button button--quiet" type="button" onClick={() => { window.location.hash = '/plugins' }}>Manage in Plugins</button>}
                     {selected.review && <button className="button button--primary" type="button" disabled={browser.busy} onClick={() => void reviewDraft(selected)}>Review and approve</button>}
                   </div>

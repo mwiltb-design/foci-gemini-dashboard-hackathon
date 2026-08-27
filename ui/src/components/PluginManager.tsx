@@ -81,7 +81,7 @@ export function PluginManager({
     const description = idea.trim()
     if (!description && !reference.trim()) return
     const source = reference.trim() ? ` Use this as a functional reference: ${reference.trim()}. Duplicate the useful behavior, but do not copy branding or copyrighted assets.` : ''
-    onCreateWithPi(`Use the dashboard-plugin-authoring skill. I want a Pi Dashboard plugin that: ${description || 'reproduces the referenced plugin functionality'}.${source} Classify it as a trusted static install, a new static plugin, or a bundled agent-connected plugin before changing files. Follow the skill's routed contract and tests. Do not commit the main Dashboard repository or push anything. When finished, tell me exactly how to review and activate it in the Plugins page.`)
+    onCreateWithPi(`Use the dashboard-plugin-authoring skill. I want a Foci Dashboard plugin that: ${description || 'reproduces the referenced plugin functionality'}.${source} Classify it as a trusted static install, a new static plugin, or a bundled agent-connected plugin before changing files. Follow the skill's routed contract and tests. Do not commit the main Dashboard repository or push anything. When finished, tell me exactly how to review and activate it in the Plugins page.`)
   }
 
   async function reviewRepository(event: FormEvent) {
@@ -126,7 +126,7 @@ export function PluginManager({
       const enabling = !plugin.enabled
       await onSetEnabled(plugin.id, enabling)
       if (enabling && (plugin.agentSkills.length || plugin.agentTools.length)) {
-        setNotice(`${plugin.name} is enabled. Instruction-only skills are active; grant-dependent skills and PI tools still require the read or write approvals below.`)
+        setNotice(`${plugin.name} is enabled. Instruction-only skills are active; grant-dependent skills and Gemini tools still require the read or write approvals below.`)
       }
     }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to update plugin') }
@@ -139,7 +139,7 @@ export function PluginManager({
     try {
       await onSetAgentAccess(plugin.id, { ...plugin.agentAccess, [access]: !plugin.agentAccess[access] })
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to update Pi access')
+      setError(reason instanceof Error ? reason.message : 'Unable to update Gemini access')
     } finally {
       setBusy('')
     }
@@ -181,7 +181,7 @@ export function PluginManager({
       <div className="metrics">
         <div className="metric"><b>{String(plugins.length).padStart(2, '0')}</b><span>Installed</span></div>
         <div className="metric"><b>{String(enabledCount).padStart(2, '0')}</b><span>Enabled</span></div>
-        <div className="metric"><b>{String(piEnabledCount).padStart(2, '0')}</b><span>Available to Pi</span></div>
+        <div className="metric"><b>{String(piEnabledCount).padStart(2, '0')}</b><span>Available to Gemini</span></div>
       </div>
       {(error || registryError) && <div className="connection-banner">{error || registryError}</div>}
       {notice && <div className="plugin-manager-notice">{notice}</div>}
@@ -198,10 +198,10 @@ export function PluginManager({
               <span>
                 <strong>{plugin.name}</strong>
                 <em>{plugin.description || 'No description'}</em>
-                <small>{plugin.enabled ? 'Enabled' : 'Disabled'} · {plugin.agentSkills.length} skill{plugin.agentSkills.length === 1 ? '' : 's'} · {plugin.agentTools.length} PI tool{plugin.agentTools.length === 1 ? '' : 's'}</small>
+                <small>{plugin.enabled ? 'Enabled' : 'Disabled'} · {plugin.agentSkills.length} skill{plugin.agentSkills.length === 1 ? '' : 's'} · {plugin.agentTools.length} Gemini tool{plugin.agentTools.length === 1 ? '' : 's'}</small>
               </span>
             </button>)}
-            {!loading && plugins.length === 0 && <div className="plugin-library-empty"><strong>No plugins yet</strong><span>Ask Pi to make one or install a trusted repository.</span></div>}
+            {!loading && plugins.length === 0 && <div className="plugin-library-empty"><strong>No plugins yet</strong><span>Ask Gemini to make one or install a trusted repository.</span></div>}
           </div>
         </aside>
 
@@ -238,14 +238,14 @@ export function PluginManager({
             </div>
           </div> : adding ? <div className="plugin-add-flow">
             <header className="plugin-detail-head">
-              <div><span className="eyebrow">Add a plugin</span><h2>What would you like to add?</h2><p>Pi can create the plugin, reproduce useful behavior from a reference, or you can install a prebuilt repository as-is.</p></div>
+              <div><span className="eyebrow">Add a plugin</span><h2>What would you like to add?</h2><p>Gemini can create the plugin, reproduce useful behavior from a reference, or you can install a prebuilt repository as-is.</p></div>
             </header>
             <section className="plugin-add-section plugin-add-section--primary">
               <span className="plugin-add-icon">✦</span>
-              <div><h3>Create or reproduce with Pi</h3><p>Describe what you want. Add an optional GitHub or website reference if there is an example Pi should study.</p></div>
-              <label><span>What should the plugin do?</span><textarea value={idea} onChange={(event) => setIdea(event.target.value)} placeholder="A family calendar where Pi can read events and add appointments…" rows={4} /></label>
+              <div><h3>Create or reproduce with Gemini</h3><p>Describe what you want. Add an optional GitHub or website reference if there is an example Gemini should study.</p></div>
+              <label><span>What should the plugin do?</span><textarea value={idea} onChange={(event) => setIdea(event.target.value)} placeholder="A family calendar where Gemini can read events and add appointments…" rows={4} /></label>
               <label><span>Optional reference</span><input value={reference} onChange={(event) => setReference(event.target.value)} placeholder="https://github.com/owner/example or https://example.com" /></label>
-              <button className="button button--primary" type="button" disabled={!idea.trim() && !reference.trim()} onClick={createWithPi}>Continue in Chat with Pi</button>
+              <button className="button button--primary" type="button" disabled={!idea.trim() && !reference.trim()} onClick={createWithPi}>Continue in Chat with Gemini</button>
             </section>
             <section className="plugin-add-section">
               <span className="plugin-add-icon">⌁</span>
@@ -272,7 +272,7 @@ export function PluginManager({
               <span>v{selected.version}</span>
               <span>{runtimeLabel(selected)}</span>
               <span>{selected.agentSkills.length ? `${selected.agentSkills.length} bundled skill${selected.agentSkills.length === 1 ? '' : 's'}` : 'No bundled skills'}</span>
-              <span>{selected.agentTools.length ? `${selected.agentTools.length} Pi tool${selected.agentTools.length === 1 ? '' : 's'}` : 'No Pi access needed'}</span>
+              <span>{selected.agentTools.length ? `${selected.agentTools.length} Gemini tool${selected.agentTools.length === 1 ? '' : 's'}` : 'No Gemini access needed'}</span>
             </div>
             <section className="plugin-primary-actions">
               <div><h3>Dashboard access</h3><p>Controls whether this plugin appears and runs in your dashboard.</p></div>
@@ -280,25 +280,25 @@ export function PluginManager({
               <button className="button button--primary" type="button" disabled={!selected.enabled} onClick={() => onOpen(selected.id)}>Open plugin</button>
             </section>
             {selected.agentSkills.length > 0 && <section className="plugin-agent-skills">
-              <div className="plugin-section-heading"><span className="eyebrow">Plugin-owned</span><h3>Bundled skills</h3><p>Instruction-only skills follow plugin enablement. Skills that use plugin tools also require the matching PI access grant.</p></div>
+              <div className="plugin-section-heading"><span className="eyebrow">Plugin-owned</span><h3>Bundled skills</h3><p>Instruction-only skills follow plugin enablement. Skills that use plugin tools also require the matching Gemini access grant.</p></div>
               {selected.agentSkills.map((skill) => {
                 const available = selected.enabled && (!skill.access || selected.agentAccess[skill.access])
                 return <div className={available ? 'is-enabled' : ''} key={skill.name}>
                   <span><strong>{skill.name}</strong><small>{skill.description}</small></span>
-                  <b>{available ? 'Available to PI' : !selected.enabled ? 'Plugin disabled' : `Needs ${skill.access} access`}</b>
+                  <b>{available ? 'Available to Gemini' : !selected.enabled ? 'Plugin disabled' : `Needs ${skill.access} access`}</b>
                 </div>
               })}
             </section>}
             {selected.agentTools.length > 0 ? <section className="plugin-agent-access">
-              <div className="plugin-section-heading"><span className="eyebrow">Optional</span><h3>Pi access</h3><p>Dashboard enablement and Pi access are separate. Grant only what you want Pi to do in chat.</p></div>
+              <div className="plugin-section-heading"><span className="eyebrow">Optional</span><h3>Gemini access</h3><p>Dashboard enablement and Gemini access are separate. Grant only what you want Gemini to do in chat.</p></div>
               {readTools.length > 0 && <button className={`plugin-access-row ${selected.agentAccess.read ? 'is-enabled' : ''}`} type="button" disabled={busy !== ''} onClick={() => void toggleAgentAccess(selected, 'read')}>
-                <span><strong>Allow Pi to read</strong><small>{readTools.map((tool) => tool.label).join(', ')}</small></span><b>{selected.agentAccess.read ? 'Allowed' : 'Not allowed'}</b>
+                <span><strong>Allow Gemini to read</strong><small>{readTools.map((tool) => tool.label).join(', ')}</small></span><b>{selected.agentAccess.read ? 'Allowed' : 'Not allowed'}</b>
               </button>}
               {writeTools.length > 0 && <button className={`plugin-access-row plugin-access-row--write ${selected.agentAccess.write ? 'is-enabled' : ''}`} type="button" disabled={busy !== ''} onClick={() => void toggleAgentAccess(selected, 'write')}>
-                <span><strong>Allow Pi to make changes</strong><small>{writeTools.map((tool) => tool.label).join(', ')}</small></span><b>{selected.agentAccess.write ? 'Allowed' : 'Not allowed'}</b>
+                <span><strong>Allow Gemini to make changes</strong><small>{writeTools.map((tool) => tool.label).join(', ')}</small></span><b>{selected.agentAccess.write ? 'Allowed' : 'Not allowed'}</b>
               </button>}
-              {!selected.enabled && (selected.agentAccess.read || selected.agentAccess.write) && <p className="plugin-inline-note">These grants are saved, but Pi cannot use them while the plugin is disabled.</p>}
-            </section> : <section className="plugin-agent-empty"><span>Dashboard only</span><p>This plugin does not need a connection to Pi—for example, a game or display-only tool.</p></section>}
+              {!selected.enabled && (selected.agentAccess.read || selected.agentAccess.write) && <p className="plugin-inline-note">These grants are saved, but Gemini cannot use them while the plugin is disabled.</p>}
+            </section> : <section className="plugin-agent-empty"><span>Dashboard only</span><p>This plugin does not need a connection to Gemini—for example, a game or display-only tool.</p></section>}
             <details className="plugin-technical">
               <summary>Technical details</summary>
               <dl className="plugin-detail-metadata">

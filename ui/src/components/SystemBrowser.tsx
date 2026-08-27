@@ -152,7 +152,7 @@ function MemoryCheckpointSettings({ memory, files, busy, onSave, onRun, onReset 
   }
 
   function runNow() {
-    if (window.confirm('Run a memory checkpoint now? This starts a short Pi turn using the active model.')) void onRun()
+    if (window.confirm('Run a memory checkpoint now? This starts a short Gemini turn using the active model.')) void onRun()
   }
 
   const userPercent = Math.min(100, status.userMessages / Math.max(1, status.effectiveUserMessages) * 100)
@@ -204,7 +204,7 @@ function SystemContent({ snapshot, busy, onActive, onDefaults, onCuratedMemorySa
   const [shortcutNotice, setShortcutNotice] = useState('')
 
   function restart() {
-    if (window.confirm('Restart the local Pi RPC process? The current saved session will be preserved, but the dashboard will briefly disconnect.')) void onRestart()
+    if (window.confirm('Restart the local Agent RPC process? The current saved session will be preserved, but the dashboard will briefly disconnect.')) void onRestart()
   }
 
   async function handleCreateShortcut() {
@@ -222,14 +222,14 @@ function SystemContent({ snapshot, busy, onActive, onDefaults, onCuratedMemorySa
   return (
     <>
       <div className="system-overview">
-        <Fact label="Pi RPC" value={snapshot.pi.rpcConnected ? 'Online' : 'Degraded'} tone={snapshot.pi.rpcConnected ? 'accent' : 'warning'} />
+        <Fact label="Agent RPC" value={snapshot.pi.rpcConnected ? 'Online' : 'Degraded'} tone={snapshot.pi.rpcConnected ? 'accent' : 'warning'} />
         <Fact label="Git working tree" value={!snapshot.workspace.git.available ? 'Unavailable' : snapshot.workspace.git.clean ? 'Clean' : 'Changed'} tone={snapshot.workspace.git.clean ? 'accent' : 'warning'} />
         <Fact label="Backend uptime" value={uptime(snapshot.backend.uptimeSeconds)} />
         <Fact label="Connected browsers" value={String(snapshot.backend.connectedClients)} />
       </div>
 
       {shortcutNotice && <div className="connection-banner">{shortcutNotice}</div>}
-      {snapshot.pi.error && <div className="board-error">Pi RPC: {snapshot.pi.error}</div>}
+      {snapshot.pi.error && <div className="board-error">Agent RPC: {snapshot.pi.error}</div>}
       {stats?.error && <div className="board-error">Session statistics: {stats.error}</div>}
       <div className="system-grid system-grid--models">
         <ModelForm
@@ -246,7 +246,7 @@ function SystemContent({ snapshot, busy, onActive, onDefaults, onCuratedMemorySa
         />
         <ModelForm
           title="New-session defaults"
-          description="Updates the allowlisted global Pi defaults used by future sessions and scheduled jobs."
+          description="Updates the allowlisted global Gemini defaults used by future sessions and scheduled jobs."
           models={snapshot.pi.availableModels}
           levels={snapshot.pi.thinkingLevels}
           initialProvider={globalDefaults.defaultProvider ?? config.effectiveDefaults.provider}
@@ -269,12 +269,12 @@ function SystemContent({ snapshot, busy, onActive, onDefaults, onCuratedMemorySa
             <div><span className="eyebrow">Runtime</span><h2>Dashboard services</h2></div>
             <div style={{ display: 'flex', gap: '6px' }}>
               <button className="button button--quiet" type="button" onClick={handleCreateShortcut}>📌 Desktop Shortcut</button>
-              <button className="button button--quiet" type="button" disabled={busy || Boolean(snapshot.pi.state.isStreaming)} onClick={restart}>Restart Pi RPC</button>
+              <button className="button button--quiet" type="button" disabled={busy || Boolean(snapshot.pi.state.isStreaming)} onClick={restart}>Restart Agent RPC</button>
             </div>
           </header>
           <div className="system-list">
             <div><span>Dashboard</span><code>v{snapshot.backend.dashboardVersion}</code></div>
-            <div><span>Pi</span><code>{snapshot.backend.piVersion}</code></div>
+            <div><span>Agent runtime</span><code>{snapshot.backend.piVersion}</code></div>
             <div><span>Node.js</span><code>{snapshot.backend.nodeVersion}</code></div>
             <div><span>Platform</span><code>{snapshot.backend.platform}</code></div>
             <div><span>Backend started</span><code>{date(snapshot.backend.startedAt)}</code></div>

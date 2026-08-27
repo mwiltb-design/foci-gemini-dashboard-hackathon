@@ -26,6 +26,7 @@ export interface WorkerCoordinatorOptions {
   adapters: WorkerAdapter[]
   rulesService: WorkerRulesService
   bounds: WorkerBounds
+  defaultProviderId?: string
   primaryDefaults: () => Promise<{ model?: { provider: string; id: string }; thinkingLevel?: string }>
 }
 
@@ -233,7 +234,7 @@ export class WorkerCoordinator extends EventEmitter {
   }): Promise<WorkerTask> {
     if (this.activeTaskId) throw new WorkerError('A worker is already executing another task', 409)
 
-    const providerId = input.providerId || 'sub-pi'
+    const providerId = input.providerId || this.options.defaultProviderId || 'sub-pi'
     const adapter = this.getAdapter(providerId)
     if (!adapter) throw new WorkerError(`Worker provider '${providerId}' is not available`, 404)
 

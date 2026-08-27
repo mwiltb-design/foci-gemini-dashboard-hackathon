@@ -186,8 +186,8 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 
 /* Sidebar */
 .sidebar { position: sticky; top: 18px; display: flex; flex-direction: column; width: 100%; min-width: 0; height: calc(100vh - 36px); padding: 16px 12px; overflow-y: auto; background: color-mix(in srgb, var(--sidebar) 94%, transparent); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); z-index: 30; }
-.sidebar__brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 20px; font-weight: 700; font-size: 14px; letter-spacing: .04em; white-space: nowrap; }
-.brand-mark { display: grid; place-items: center; flex: 0 0 auto; width: 32px; height: 32px; border-radius: 10px; color: #10201d; background: var(--accent); font-weight: 700; }
+.sidebar__brand { display: flex; align-items: center; gap: 10px; padding: 4px 6px 18px; font-weight: 700; font-size: 14px; letter-spacing: -.01em; color: var(--text); white-space: nowrap; }
+.brand-mark { display: block; flex: 0 0 auto; width: 30px; height: 30px; border-radius: 9px; }
 .sidebar__close { display: none; margin-left: auto; padding: 0; color: var(--muted); background: none; border: 0; font-size: 26px; cursor: pointer; }
 .sidebar__spacer { flex: 1; min-height: 18px; }
 .nav-label { display: block; margin: 8px 8px 7px; color: var(--muted); font: 600 11px 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: .12em; }

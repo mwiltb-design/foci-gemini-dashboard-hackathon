@@ -25,7 +25,7 @@ const PRESET_DEFINITIONS: Record<'basic' | 'developer' | 'business', {
   basic: {
     name: 'User / Basic',
     icon: '★',
-    subtitle: 'Clean & focused: Chat, Files, Terminal, and Sub-PI solo worker.',
+    subtitle: 'Clean & focused: Chat, Files, Terminal, and Gemini solo worker.',
     features: ['chat', 'files', 'files-editor', 'sessions', 'skills', 'settings', 'plugins', 'terminal', 'workers'],
     providers: { 'sub-pi': true, 'antigravity-cli': false, 'codex-cli': false, 'claude-cli': false },
     showRulesEditor: false,
@@ -266,7 +266,7 @@ export function StackFeatureSelectorCard() {
                     onChange={() => handleToggleProvider('sub-pi')}
                     disabled={busy}
                   />
-                  <span><strong>Sub-PI Worker</strong> — Built-in isolated Pi agent</span>
+                  <span><strong>Gemini Worker</strong> — Built-in isolated Gemini agent</span>
                 </label>
                 <label className="feature-checkbox">
                   <input

@@ -17,7 +17,7 @@ export function ExtensionDialog({ request, onRespond }: ExtensionDialogProps) {
   return (
     <div className="dialog-backdrop" role="presentation">
       <section className="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
-        <span className="eyebrow">Pi needs your input</span>
+        <span className="eyebrow">Gemini needs your input</span>
         <h2 id="dialog-title">{request.title ?? 'Continue?'}</h2>
         {request.message && <p>{request.message}</p>}
 
