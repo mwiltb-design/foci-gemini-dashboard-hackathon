@@ -37,6 +37,8 @@ The example selects Gemini for the primary agent and configures both the primary
 
 Install dependencies and start the local server with `npm --prefix server run start` (or use `npm --prefix server run dev` for watch mode). The server loads the repository-root `.env` for both local `tsx` runs and compiled runs. Existing shell or platform environment variables take precedence over values in `.env`.
 
+If a local demo isolates `HOME` or `USERPROFILE`, set `PI_DASHBOARD_ANTIGRAVITY_HOME` (or `ANTIGRAVITY_HOME`) to the parent Gemini config directory, such as `C:\Users\you\.gemini`, so the Antigravity worker can find existing credentials.
+
 Never commit `.env`. It is ignored by Git and excluded from the Docker build context; pass production secrets through the deployment platform instead.
 
 ## Local Cloud-container smoke test

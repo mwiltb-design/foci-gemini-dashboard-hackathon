@@ -91,6 +91,7 @@ const pluginToolsExtension = process.env.PI_DASHBOARD_PLUGIN_TOOLS_EXTENSION ?? 
 const workersExtension = process.env.PI_DASHBOARD_WORKERS_EXTENSION ?? resolve(process.cwd(), 'extensions/dashboard-workers.ts')
 const dashboardPluginAuthoringSkill = process.env.PI_DASHBOARD_PLUGIN_AUTHORING_SKILL_PATH ?? resolve(process.cwd(), 'skills/dashboard-plugin-authoring')
 const dashboardReferenceSkill = process.env.PI_DASHBOARD_REFERENCE_SKILL_PATH ?? resolve(process.cwd(), 'skills/dashboard-reference')
+const antigravityHome = process.env.PI_DASHBOARD_ANTIGRAVITY_HOME ?? process.env.ANTIGRAVITY_HOME
 const repoPluginDir = resolve(import.meta.dirname ?? process.cwd(), '../../plugins')
 const pluginCodeRoot = process.env.PI_DASHBOARD_PLUGIN_CODE_ROOT ?? (existsSync(repoPluginDir) ? repoPluginDir : resolve(process.cwd(), 'plugins'))
 let pluginStateRoot = process.env.PI_DASHBOARD_PLUGIN_STATE_ROOT ?? resolve(projectDataDir, 'plugin-data')
@@ -169,6 +170,7 @@ let antigravityWorker = new AntigravityWorkerAdapter({
   workspace,
   git,
   enabled: enabledFeatures.has('workers'),
+  antigravityHome,
 })
 let codexWorker = new CodexWorkerAdapter({
   workspace,
@@ -367,6 +369,7 @@ async function switchActiveWorkspace(targetWorkspace: string): Promise<{ workspa
     workspace,
     git,
     enabled: enabledFeatures.has('workers'),
+    antigravityHome,
   })
   codexWorker = new CodexWorkerAdapter({
     workspace,
