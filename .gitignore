@@ -25,5 +25,8 @@ Desktop.ini
 # Runtime State & User Data
 .pi/
 workspace/
+demo-workspace/
+demo-home/
+worker-artifacts/
 user-data/
 scratch/
