@@ -1647,6 +1647,7 @@ async function handleCommand(socket: WebSocket, command: BrowserCommand): Promis
         const message = typeof command.message === 'string' ? command.message.trim() : ''
         if (!message || message.length > 100_000) throw new Error('Prompt must contain between 1 and 100,000 characters')
         const response = await rpc.request({ type: 'prompt', message })
+        if (!response.success) throw new Error(response.error ?? 'Prompt request failed')
         send(socket, { type: 'command_result', command: 'prompt', success: true, data: response.data })
         break
       }

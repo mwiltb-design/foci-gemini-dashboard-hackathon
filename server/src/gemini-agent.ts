@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { dirname, resolve, sep } from 'node:path'
-import { FunctionCallingConfigMode, GoogleGenAI, Type, type Content, type FunctionCall, type FunctionDeclaration } from '@google/genai'
+import { FunctionCallingConfigMode, GoogleGenAI, Type, type Content, type FunctionDeclaration, type Part } from '@google/genai'
 import type { JsonObject, RpcEvent, RpcResponse } from './types.js'
 
 interface GeminiAgentOptions {
@@ -190,20 +190,21 @@ export class GeminiAgentProcess extends EventEmitter {
     try {
       for (let round = 0; round < 8; round += 1) {
         let roundText = ''
-        const calls = await this.generateRound((delta) => {
+        const functionCallParts = await this.generateRound((delta) => {
           roundText += delta
           assistantText += delta
           this.emitEvent({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta } })
         })
-        if (calls.length === 0) {
+        if (functionCallParts.length === 0) {
           if (roundText) this.contents.push({ role: 'model', parts: [{ text: roundText }] })
           break
         }
         this.contents.push({ role: 'model', parts: [
           ...(roundText ? [{ text: roundText }] : []),
-          ...calls.map((call) => ({ functionCall: call })),
+          ...functionCallParts,
         ] })
-        const pendingTools = calls.map(async (call) => {
+        const pendingTools = functionCallParts.map(async (part) => {
+          const call = part.functionCall!
           const toolCallId = call.id || `gemini-tool-${Date.now()}-${Math.random().toString(36).slice(2)}`
           const toolName = call.name || 'unknown_tool'
           const args = call.args ?? {}
@@ -231,7 +232,7 @@ export class GeminiAgentProcess extends EventEmitter {
     }
   }
 
-  private async generateRound(onText: (delta: string) => void): Promise<FunctionCall[]> {
+  private async generateRound(onText: (delta: string) => void): Promise<Part[]> {
     if (!this.ai) throw new Error('Gemini client is not initialized')
     const systemInstruction = await this.systemInstruction()
     const stream = await this.ai.models.generateContentStream({
@@ -243,14 +244,16 @@ export class GeminiAgentProcess extends EventEmitter {
         toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.AUTO } },
       },
     })
-    const calls: FunctionCall[] = []
+    const functionCallParts: Part[] = []
     for await (const chunk of stream) {
       if (this.abortController?.signal.aborted) throw new Error('aborted')
       const text = chunk.text ?? ''
       if (text) onText(text)
-      if (chunk.functionCalls?.length) calls.push(...chunk.functionCalls)
+      for (const part of chunk.candidates?.[0]?.content?.parts ?? []) {
+        if (part.functionCall?.name) functionCallParts.push(part)
+      }
     }
-    return calls.filter((call) => Boolean(call.name))
+    return functionCallParts
   }
 
   private async systemInstruction(): Promise<string> {
