@@ -34,7 +34,7 @@ export function WorkersBrowser({ onOpenSession }: { onOpenSession: (sessionId: s
   const system = useSystemStatus()
 
   const [activeTab, setActiveTab] = useState<'tasks' | 'rules'>('tasks')
-  const [selectedProviderId, setSelectedProviderId] = useState('codex-cli')
+  const [selectedProviderId, setSelectedProviderId] = useState('gemini-worker')
   const [mode, setMode] = useState<WorkerMode>('research')
   const [selectedModelKey, setSelectedModelKey] = useState('default')
   const [selectedThinking, setSelectedThinking] = useState('default')
@@ -270,7 +270,7 @@ export function WorkersBrowser({ onOpenSession }: { onOpenSession: (sessionId: s
                     </button>
                   </div>
 
-                  <strong>{provider.name}{provider.id === 'codex-cli' ? ' · Primary' : ''}</strong>
+                  <strong>{provider.name}</strong>
                   <p>{provider.description}</p>
                   <small>{provider.statusLabel}</small>
 
@@ -326,15 +326,13 @@ export function WorkersBrowser({ onOpenSession }: { onOpenSession: (sessionId: s
                   <span className="eyebrow">New task</span>
                   <h2>Delegate to {currentProvider?.name ?? 'Worker'}</h2>
                   <p>
-                    {currentProvider?.id === 'codex-cli'
-                      ? 'Primary worker for repository investigation, code changes, tests, builds, and focused validation.'
-                      : currentProvider?.id === 'gemini-worker'
-                        ? 'Cloud-native Gemini fallback executes bounded research and creates structured artifacts.'
-                        : currentProvider?.id === 'sub-pi'
-                          ? 'Sub PI executes in a separate Foci session. Primary agent receives only the bounded result.'
-                          : currentProvider?.id === 'antigravity-cli'
-                            ? 'Antigravity CLI executes with full reasoning and workspace permissions (research, review, implement).'
-                            : `${currentProvider?.name} runs bounded in the workspace and returns structured findings.`}
+                    {currentProvider?.id === 'gemini-worker'
+                      ? 'Cloud-native Gemini worker executes bounded tasks in the workspace and creates structured artifacts.'
+                      : currentProvider?.id === 'sub-pi'
+                        ? 'Sub PI executes in a separate Foci session. Primary agent receives only the bounded result.'
+                        : currentProvider?.id === 'antigravity-cli'
+                          ? 'Antigravity CLI executes with full reasoning and workspace permissions (research, review, implement).'
+                          : `${currentProvider?.name} runs bounded in the workspace and returns structured findings.`}
                   </p>
                 </div>
               </header>

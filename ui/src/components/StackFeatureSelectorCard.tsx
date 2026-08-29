@@ -25,25 +25,25 @@ const PRESET_DEFINITIONS: Record<'basic' | 'developer' | 'business', {
   basic: {
     name: 'User / Basic',
     icon: '★',
-    subtitle: 'Clean & focused: Chat, Files, Terminal, Codex primary, and Gemini fallback.',
+    subtitle: 'Clean & focused: Chat, Files, Terminal, and Gemini solo worker.',
     features: ['chat', 'files', 'files-editor', 'sessions', 'skills', 'settings', 'plugins', 'terminal', 'workers'],
-    providers: { 'codex-cli': true, 'gemini-worker': true, 'antigravity-cli': false },
+    providers: { 'gemini-worker': true, 'antigravity-cli': false },
     showRulesEditor: false,
   },
   developer: {
     name: 'Developer',
     icon: '⚡',
-    subtitle: 'Hackathon stack: Codex primary, Gemini fallback, Antigravity optional, Rules Editor, and App Previewer.',
+    subtitle: 'Hackathon stack: Gemini Worker, Antigravity CLI, Rules Editor, and App Previewer.',
     features: ['chat', 'files', 'files-editor', 'sessions', 'skills', 'settings', 'plugins', 'terminal', 'workers', 'previewer'],
-    providers: { 'codex-cli': true, 'gemini-worker': true, 'antigravity-cli': true },
+    providers: { 'gemini-worker': true, 'antigravity-cli': true },
     showRulesEditor: true,
   },
   business: {
     name: 'Demo / Advanced',
     icon: '🏢',
-    subtitle: 'Codex + Gemini + Antigravity with Automations/Cron for richer demos.',
+    subtitle: 'Gemini + Antigravity with Automations/Cron for richer demos.',
     features: ['chat', 'files', 'files-editor', 'sessions', 'skills', 'settings', 'plugins', 'terminal', 'workers', 'previewer', 'cron'],
-    providers: { 'codex-cli': true, 'gemini-worker': true, 'antigravity-cli': true },
+    providers: { 'gemini-worker': true, 'antigravity-cli': true },
     showRulesEditor: true,
   },
 }
@@ -262,20 +262,11 @@ export function StackFeatureSelectorCard() {
                 <label className="feature-checkbox">
                   <input
                     type="checkbox"
-                    checked={data.providersEnabled['codex-cli'] ?? true}
-                    onChange={() => handleToggleProvider('codex-cli')}
-                    disabled={busy}
-                  />
-                  <span><strong>Codex CLI</strong> — Primary worker for code, tests, repo, Docker, and Cloud Run tasks</span>
-                </label>
-                <label className="feature-checkbox">
-                  <input
-                    type="checkbox"
                     checked={data.providersEnabled['gemini-worker'] ?? true}
                     onChange={() => handleToggleProvider('gemini-worker')}
                     disabled={busy}
                   />
-                  <span><strong>Gemini Worker</strong> — Cloud-native fallback for reliable research, review, and artifacts</span>
+                  <span><strong>Gemini Worker</strong> — Cloud-native Gemini agent for reliable research, review, and artifacts</span>
                 </label>
                 <label className="feature-checkbox">
                   <input

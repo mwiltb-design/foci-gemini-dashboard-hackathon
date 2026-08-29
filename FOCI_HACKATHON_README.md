@@ -97,10 +97,10 @@ When deploying to Cloud Run with persistent storage (such as a mounted GCS volum
 | `PI_DASHBOARD_WORKSPACE` (or `FOCI_WORKSPACE`) | Explicit active workspace override. If unset, restores the last active project from `<data-dir>/active-workspace.json`, or defaults to `<projects-root>/Default` | Unset (auto-restores) | Unset (auto-restores) |
 | `PI_DASHBOARD_WORKER_RULES_ROOT` | Optional override for worker rules and configurations | `<data-dir>/workers` | `/data/dashboard/workers` |
 | `PI_DASHBOARD_ANTIGRAVITY_HOME` / `ANTIGRAVITY_HOME` | Antigravity CLI credential/config directory. In the container, `/home/node/.gemini` is symlinked here so Manage CLI OAuth state persists on the mounted volume. | `~/.gemini` | `/data/gemini` |
-| `PI_DASHBOARD_CODEX_HOME` / `CODEX_HOME` | Codex CLI credential/config directory. In the container, `/home/node/.codex` is symlinked here so Manage CLI sign-in state persists on the mounted volume. | `~/.codex` | `/data/codex` |
-| `FOCI_ENABLED_WORKERS` | Comma-separated list of enabled worker providers, in default preference order | `codex-cli,gemini-worker,antigravity-cli` (in cloud mode) | `codex-cli,gemini-worker,antigravity-cli` |
+| `FOCI_ENABLED_WORKERS` | Comma-separated list of enabled worker providers | `gemini-worker,antigravity-cli` (in cloud mode) | `gemini-worker,antigravity-cli` |
 
 ### Active Workspace Persistence
 - When a user creates or switches projects in the UI (`/api/projects/switch`), the selected active workspace path is recorded in `<data-dir>/active-workspace.json`.
 - On container startup or server restart, if no explicit `PI_DASHBOARD_WORKSPACE` is passed, the server automatically restores the previously selected active project.
 - Non-active projects in `PI_PROJECTS_ROOT` are preserved and remain selectable in the Projects modal.
+

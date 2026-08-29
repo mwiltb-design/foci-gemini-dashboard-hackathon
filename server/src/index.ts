@@ -145,7 +145,6 @@ const workersExtension = process.env.PI_DASHBOARD_WORKERS_EXTENSION ?? resolve(e
 const dashboardPluginAuthoringSkill = process.env.PI_DASHBOARD_PLUGIN_AUTHORING_SKILL_PATH ?? resolve(skillsDir, 'dashboard-plugin-authoring')
 const dashboardReferenceSkill = process.env.PI_DASHBOARD_REFERENCE_SKILL_PATH ?? resolve(skillsDir, 'dashboard-reference')
 const antigravityHome = process.env.PI_DASHBOARD_ANTIGRAVITY_HOME ?? process.env.ANTIGRAVITY_HOME
-const codexHome = process.env.PI_DASHBOARD_CODEX_HOME ?? process.env.CODEX_HOME
 const repoPluginDir = resolve(import.meta.dirname ?? process.cwd(), '../../plugins')
 const pluginCodeRoot = process.env.PI_DASHBOARD_PLUGIN_CODE_ROOT ?? (existsSync(repoPluginDir) ? repoPluginDir : resolve(process.cwd(), 'plugins'))
 let pluginStateRoot = process.env.PI_DASHBOARD_PLUGIN_STATE_ROOT ?? resolve(projectDataDir, 'plugin-data')
@@ -179,8 +178,8 @@ let rpcArgs = ['--mode', 'rpc', '--continue', '--name', 'Pi Dashboard', '--exten
 const useGeminiAgent = (process.env.FOCI_AGENT_PROVIDER ?? process.env.PI_DASHBOARD_AGENT_PROVIDER ?? '').toLowerCase() === 'gemini'
 const { allowedIds: enabledWorkerIds } = resolveEnabledWorkerProviders()
 const defaultWorkerProviderId = (enabledWorkerIds && !enabledWorkerIds.includes('sub-pi'))
-  ? (enabledWorkerIds[0] ?? 'codex-cli')
-  : (useGeminiAgent ? 'codex-cli' : 'sub-pi')
+  ? (enabledWorkerIds[0] ?? 'gemini-worker')
+  : (useGeminiAgent ? 'gemini-worker' : 'sub-pi')
 let rpc = registerRpcListeners(useGeminiAgent
   ? new GeminiAgentProcess({ cwd: workspace, sessionDir: rpcSessionDir, workerDelegate: delegateWorker })
   : new PiRpcProcess({
@@ -237,7 +236,6 @@ let codexWorker = new CodexWorkerAdapter({
   workspace,
   git,
   enabled: enabledFeatures.has('workers'),
-  codexHome,
 })
 let claudeWorker = new ClaudeWorkerAdapter({
   workspace,
@@ -441,7 +439,6 @@ async function switchActiveWorkspace(targetWorkspace: string): Promise<{ workspa
     workspace,
     git,
     enabled: enabledFeatures.has('workers'),
-    codexHome,
   })
   claudeWorker = new ClaudeWorkerAdapter({
     workspace,

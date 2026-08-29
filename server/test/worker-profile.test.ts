@@ -4,7 +4,6 @@ import { resolveEnabledWorkerProviders, WorkerCoordinator } from '../src/worker-
 import { AntigravityWorkerAdapter, cleanEnvironment } from '../src/antigravity-worker.js'
 import { GeminiWorkerAdapter } from '../src/gemini-worker.js'
 import { SubPiWorkerAdapter } from '../src/sub-pi-worker.js'
-import { CodexWorkerAdapter } from '../src/codex-worker.js'
 import { WorkerRulesService } from '../src/worker-rules.js'
 import { GitService } from '../src/git-service.js'
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -33,7 +32,7 @@ test('resolveEnabledWorkerProviders: default desktop mode returns undefined allo
   }
 })
 
-test('resolveEnabledWorkerProviders: Cloud Run K_SERVICE or FOCI_AGENT_PROVIDER=gemini returns codex, gemini, and antigravity', () => {
+test('resolveEnabledWorkerProviders: Cloud Run K_SERVICE or FOCI_AGENT_PROVIDER=gemini returns gemini-worker and antigravity-cli', () => {
   const origK = process.env.K_SERVICE
   const origFoci = process.env.FOCI_AGENT_PROVIDER
   const origWorkers = process.env.FOCI_ENABLED_WORKERS
@@ -44,13 +43,13 @@ test('resolveEnabledWorkerProviders: Cloud Run K_SERVICE or FOCI_AGENT_PROVIDER=
     delete process.env.FOCI_AGENT_PROVIDER
     let res = resolveEnabledWorkerProviders()
     assert.equal(res.isCloudMode, true)
-    assert.deepEqual(res.allowedIds, ['codex-cli', 'gemini-worker', 'antigravity-cli'])
+    assert.deepEqual(res.allowedIds, ['gemini-worker', 'antigravity-cli'])
 
     delete process.env.K_SERVICE
     process.env.FOCI_AGENT_PROVIDER = 'gemini'
     res = resolveEnabledWorkerProviders()
     assert.equal(res.isCloudMode, true)
-    assert.deepEqual(res.allowedIds, ['codex-cli', 'gemini-worker', 'antigravity-cli'])
+    assert.deepEqual(res.allowedIds, ['gemini-worker', 'antigravity-cli'])
   } finally {
     if (origK) process.env.K_SERVICE = origK; else delete process.env.K_SERVICE
     if (origFoci) process.env.FOCI_AGENT_PROVIDER = origFoci; else delete process.env.FOCI_AGENT_PROVIDER
@@ -75,36 +74,6 @@ test('resolveEnabledWorkerProviders: explicit FOCI_ENABLED_WORKERS overrides def
   } finally {
     if (origWorkers) process.env.FOCI_ENABLED_WORKERS = origWorkers; else delete process.env.FOCI_ENABLED_WORKERS
     if (origK) process.env.K_SERVICE = origK; else delete process.env.K_SERVICE
-  }
-})
-
-test('CodexWorkerAdapter: requires an auth file even when the persistent home directory exists', () => {
-  const origPath = process.env.PATH
-  const tempDir = mkdtempSync(join(tmpdir(), 'codex-profile-test-'))
-  const fakeCodex = join(tempDir, process.platform === 'win32' ? 'codex.cmd' : 'codex')
-  const codexHome = join(tempDir, 'codex-home')
-  mkdirSync(codexHome, { recursive: true })
-  writeFileSync(fakeCodex, process.platform === 'win32' ? '@echo off\necho codex test\n' : '#!/bin/sh\necho codex test\n')
-  if (process.platform !== 'win32') chmodSync(fakeCodex, 0o755)
-  process.env.PATH = `${tempDir}${process.platform === 'win32' ? ';' : ':'}${origPath ?? ''}`
-
-  const adapter = new CodexWorkerAdapter({
-    workspace: tempDir,
-    git: new GitService(tempDir),
-    enabled: true,
-    codexHome,
-  })
-
-  try {
-    assert.equal(adapter.provider.status, 'unavailable')
-    assert.match(adapter.provider.statusLabel, /select Connect to sign in/)
-
-    writeFileSync(join(codexHome, 'auth.json'), '{}', 'utf8')
-    assert.equal(adapter.provider.status, 'ready')
-    assert.equal(adapter.provider.statusLabel, 'Installed and signed in')
-  } finally {
-    if (origPath) process.env.PATH = origPath; else delete process.env.PATH
-    rmSync(tempDir, { recursive: true, force: true })
   }
 })
 
@@ -261,16 +230,15 @@ test('WorkerCoordinator: filters snapshot and denies disallowed providers in clo
   const gemini = new GeminiWorkerAdapter({ workspace: tempDir, enabled: true })
   const subPi = new SubPiWorkerAdapter({ workspace: tempDir, git, enabled: true })
   const antigravity = new AntigravityWorkerAdapter({ workspace: tempDir, git, enabled: true })
-  const codex = new CodexWorkerAdapter({ workspace: tempDir, git, enabled: true, codexHome: join(tempDir, 'codex-home') })
 
   try {
     const coordinator = new WorkerCoordinator({
       storePath: join(tempDir, 'tasks.json'),
       archivePath: join(tempDir, 'tasks-archive.json'),
-      adapters: [codex, gemini, subPi, antigravity],
+      adapters: [gemini, subPi, antigravity],
       rulesService: rules,
       bounds: { turnLimit: 8, timeoutMs: 60000, resultLimitBytes: 12288 },
-      allowedProviderIds: ['codex-cli', 'gemini-worker', 'antigravity-cli'],
+      allowedProviderIds: ['gemini-worker', 'antigravity-cli'],
       primaryDefaults: async () => ({}),
     })
 
@@ -278,15 +246,15 @@ test('WorkerCoordinator: filters snapshot and denies disallowed providers in clo
     const snapshot = await coordinator.snapshot()
 
     assert.equal(snapshot.isFiltered, true)
-    assert.equal(snapshot.profileLabel, 'Codex / Gemini / Antigravity Cloud Profile')
-    assert.equal(snapshot.providers.length, 3)
-    assert.deepEqual(snapshot.providers.map((p) => p.id), ['codex-cli', 'gemini-worker', 'antigravity-cli'])
+    assert.equal(snapshot.profileLabel, 'Gemini / Antigravity Cloud Profile')
+    assert.equal(snapshot.providers.length, 2)
+    assert.deepEqual(snapshot.providers.map((p) => p.id), ['gemini-worker', 'antigravity-cli'])
 
     assert.equal(coordinator.getAdapter('sub-pi'), undefined)
-    assert.notEqual(coordinator.getAdapter('codex-cli'), undefined)
     assert.notEqual(coordinator.getAdapter('gemini-worker'), undefined)
     assert.notEqual(coordinator.getAdapter('antigravity-cli'), undefined)
   } finally {
     rmSync(tempDir, { recursive: true, force: true })
   }
 })
+

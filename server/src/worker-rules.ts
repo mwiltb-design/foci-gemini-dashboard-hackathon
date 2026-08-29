@@ -14,7 +14,6 @@ const DEFAULT_CONFIG: WorkerConfiguration = {
   stackPreset: 'developer',
   showRulesEditor: true,
   providersEnabled: {
-    'codex-cli': true,
     'gemini-worker': true,
     'antigravity-cli': true,
   },
@@ -23,32 +22,17 @@ const DEFAULT_CONFIG: WorkerConfiguration = {
 
 const DEFAULT_ROUTER_MD = `# Foci Hackathon Worker Router (Level 1)
 
-Foci Dashboard's Cloud Run hackathon profile uses three workers:
+Foci Dashboard's Cloud Run hackathon profile uses two Google-centered workers only:
 
-- \`codex-cli\` — primary CLI worker for repo, code, tests, Docker, and implementation tasks.
-- \`gemini-worker\` — in-process, Cloud Run-native Gemini fallback powered by \`@google/genai\`.
+- \`gemini-worker\` — in-process, Cloud Run-native Gemini worker powered by \`@google/genai\`.
 - \`antigravity-cli\` — Google Antigravity CLI worker for environments where \`agy\` is installed and authenticated.
 
-Do not route work to Claude or Sub-Pi in the hackathon Cloud profile.
+Do not route work to Codex, Claude, or Sub-Pi in the hackathon Cloud profile.
 
 ## Default routing
 
-### Codex CLI (\`codex-cli\`)
-Use as the primary worker for most development work when the provider is installed and authenticated.
-
-Best for:
-- Fast code changes, TypeScript/React/Node implementation, and focused bug fixes.
-- Test creation, build failures, Dockerfile edits, and CI/runtime troubleshooting.
-- Git/repo inspection and preparing commits after explicit user approval.
-- Reviewing concrete diffs for correctness before deployment.
-
-Modes:
-- \`research\`: focused source investigation and command-output analysis.
-- \`review\`: concise defect/regression/security review.
-- \`implement\`: direct workspace edits and validation runs.
-
 ### Gemini Worker (\`gemini-worker\`)
-Use as the reliable Cloud Run-safe fallback and for Gemini-native reasoning.
+Use as the default worker in Cloud Run and whenever reliability matters.
 
 Best for:
 - Fast research, summaries, and comparisons.
@@ -77,25 +61,12 @@ Modes:
 
 ## Routing rules
 
-1. Prefer \`codex-cli\` for repo/code/test/Docker/git tasks when authenticated; it is the primary worker.
-2. Prefer \`gemini-worker\` for Cloud Run-safe tasks, quick answers, summaries, and fallback execution when a CLI worker is unavailable.
-3. Prefer \`antigravity-cli\` for complex repo/cloud/build work only when it is authenticated and the task benefits from deep CLI workspace access.
-4. If a CLI worker is unavailable or asks for interactive auth, do not wait or retry in the background; use \`gemini-worker\` or ask the user to complete Manage CLI login.
-5. Never delegate tasks that require secrets to be displayed, credentials to be copied into chat, or interactive approval inside a background worker.
-6. Keep worker tasks narrow, bounded, and review all worker findings before accepting them.
-7. All edits/artifacts must stay inside the active workspace. Do not write to external scratch folders except normal build/test caches.
-`
-
-const DEFAULT_CODEX_MD = `# Codex CLI Guidelines (Level 2)
-
-You are the primary Codex CLI worker for Foci Dashboard's hackathon profile.
-
-## Working Principles
-1. **Primary worker**: Default to Codex for code, tests, repo inspection, Docker, Cloud Run, and implementation tasks when authenticated.
-2. **Strict workspace confinement**: All edits and artifacts must remain inside the active project workspace. Do not modify credential stores such as \`~/.codex\` unless the user explicitly asked for CLI account management.
-3. **Small verified changes**: Make focused patches, run the smallest useful validation, and avoid broad rewrites unless requested.
-4. **Security**: Never print or commit secrets. Treat \`.env\`, auth files, and tokens as private.
-5. **Structured result**: Report summary, files changed, commands run, validation results, and remaining risks.
+1. Prefer \`gemini-worker\` for Cloud Run-safe tasks, quick answers, summaries, and fallback execution.
+2. Prefer \`antigravity-cli\` for complex repo/cloud/build work only when it is authenticated and the task benefits from full CLI workspace access.
+3. If \`antigravity-cli\` is unavailable or asks for interactive auth, do not wait or retry in the background; use \`gemini-worker\` or ask the user to complete Manage CLI login.
+4. Never delegate tasks that require secrets to be displayed, credentials to be copied into chat, or interactive approval inside a background worker.
+5. Keep worker tasks narrow, bounded, and review all worker findings before accepting them.
+6. All edits/artifacts must stay inside the active workspace. Do not write to external scratch folders except normal build/test caches.
 `
 
 const DEFAULT_GEMINI_MD = `# Gemini Worker Guidelines (Level 2)
@@ -154,15 +125,13 @@ export class WorkerRulesService {
         await stat(this.routerFile)
         const existingRouter = await readFile(this.routerFile, 'utf8')
         const looksLikeLegacyDefault = existingRouter.includes('Codex CLI') && existingRouter.includes('Claude CLI') && existingRouter.includes('Sub PI') && !existingRouter.includes('gemini-worker')
-        const looksLikeGoogleHackathonDefault = existingRouter.includes('uses two Google-centered workers only') && existingRouter.includes('Do not route work to Codex')
-        if (looksLikeLegacyDefault || looksLikeGoogleHackathonDefault) await writeFile(this.routerFile, DEFAULT_ROUTER_MD, 'utf8')
+        if (looksLikeLegacyDefault) await writeFile(this.routerFile, DEFAULT_ROUTER_MD, 'utf8')
       } catch {
         await writeFile(this.routerFile, DEFAULT_ROUTER_MD, 'utf8')
       }
 
       // Seed Level 2 rule files
       const defaultRules: Record<string, string> = {
-        'codex.md': DEFAULT_CODEX_MD,
         'gemini-worker.md': DEFAULT_GEMINI_MD,
         'antigravity.md': DEFAULT_ANTIGRAVITY_MD,
       }
@@ -223,7 +192,7 @@ export class WorkerRulesService {
     const allowedProviders = envFilter && envFilter !== '*' && envFilter.toLowerCase() !== 'all'
       ? new Set(envFilter.split(',').map((id) => id.trim()).filter(Boolean))
       : cloudProfile && envFilter !== '*' && envFilter?.toLowerCase() !== 'all'
-        ? new Set(['codex-cli', 'gemini-worker', 'antigravity-cli'])
+        ? new Set(['gemini-worker', 'antigravity-cli'])
         : undefined
 
     // 1. Level 1 Router
@@ -251,7 +220,6 @@ export class WorkerRulesService {
 
     // 2. Level 2 Worker Rules
     const providerMapping: Record<string, { id: string; title: string; providerId: string }> = {
-      'codex.md': { id: 'rule-codex', title: 'Codex CLI Guidelines', providerId: 'codex-cli' },
       'gemini-worker.md': { id: 'rule-gemini-worker', title: 'Gemini Worker Guidelines', providerId: 'gemini-worker' },
       'antigravity.md': { id: 'rule-antigravity', title: 'Antigravity CLI Guidelines', providerId: 'antigravity-cli' },
     }
@@ -307,8 +275,6 @@ export class WorkerRulesService {
     } else {
       const cleanId = id.replace(/^rule-/, '').replace(/\.md$/, '')
       const providerMap: Record<string, { fileName: string; title: string; providerId: string }> = {
-        codex: { fileName: 'codex.md', title: 'Codex CLI Guidelines', providerId: 'codex-cli' },
-        'codex-cli': { fileName: 'codex.md', title: 'Codex CLI Guidelines', providerId: 'codex-cli' },
         'gemini-worker': { fileName: 'gemini-worker.md', title: 'Gemini Worker Guidelines', providerId: 'gemini-worker' },
         antigravity: { fileName: 'antigravity.md', title: 'Antigravity CLI Guidelines', providerId: 'antigravity-cli' },
         'antigravity-cli': { fileName: 'antigravity.md', title: 'Antigravity CLI Guidelines', providerId: 'antigravity-cli' },

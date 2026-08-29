@@ -13,7 +13,7 @@ interface GeminiAgentOptions {
   workerDelegate?: GeminiWorkerDelegate
 }
 
-const workerProviderIds = ['codex-cli', 'gemini-worker', 'antigravity-cli'] as const
+const workerProviderIds = ['gemini-worker', 'antigravity-cli'] as const
 const DEFAULT_GEMINI_MODEL = 'gemini-3.7-flash'
 const GEMINI_MODEL_IDS = [
   DEFAULT_GEMINI_MODEL,
@@ -94,7 +94,7 @@ const toolDeclarations: FunctionDeclaration[] = [
     parameters: {
       type: Type.OBJECT,
       properties: {
-        providerId: { type: Type.STRING, enum: [...workerProviderIds], description: 'Worker provider. Defaults to Codex CLI for repo, code, and test tasks.' },
+        providerId: { type: Type.STRING, enum: [...workerProviderIds], description: 'Worker provider. Defaults to the cloud-native Gemini worker.' },
         mode: { type: Type.STRING, enum: [...workerModes], description: 'Worker task mode.' },
         prompt: { type: Type.STRING, description: 'Complete bounded task and expected deliverable.' },
         bounds: {
@@ -614,7 +614,6 @@ export class GeminiAgentProcess extends EventEmitter {
       'Be concise, transparent, and safe. Prefer small, reversible file edits.',
       'Use tools when you need exact workspace facts. Do not claim a file changed unless a tool succeeded.',
       'Use dashboard_delegate_worker for narrow delegated tasks. Review its result before presenting findings or accepting changes.',
-      'Prefer codex-cli for repository implementation, code changes, and test work; keep gemini-worker and antigravity-cli available for their specialized strengths.',
       'For shell commands, use the smallest safe command and explain risky operations before attempting them.',
       memory ? `Project MEMORY.md:\n${memory.slice(0, 20_000)}` : '',
       user ? `Workspace USER.md:\n${user.slice(0, 8_000)}` : '',
