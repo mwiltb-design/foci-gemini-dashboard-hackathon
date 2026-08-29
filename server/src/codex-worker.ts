@@ -52,13 +52,16 @@ ${input.prompt}
 Return a concise, structured summary of your findings and actions inside "${workspace}".`
 }
 
-function cleanEnvironment(): NodeJS.ProcessEnv {
+function cleanEnvironment(codexHome?: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env }
   for (const key of Object.keys(env)) {
     if (/token|secret|password|key/i.test(key) && !/api_key/i.test(key)) {
       delete env[key]
     }
   }
+  if (codexHome) env.CODEX_HOME = codexHome
+  env.CI = '1'
+  env.NONINTERACTIVE = '1'
   return env
 }
 
@@ -77,7 +80,7 @@ export class CodexWorkerAdapter implements WorkerAdapter {
   get provider(): WorkerProviderStatus {
     const hasExecutable = Boolean(findExecutable('codex'))
     const codexHome = this.options.codexHome ?? join(homedir(), '.codex')
-    const authenticated = existsSync(join(codexHome, 'auth.json')) || existsSync(codexHome)
+    const authenticated = existsSync(join(codexHome, 'auth.json')) || Boolean(process.env.OPENAI_API_KEY?.trim())
     const ready = this.options.enabled && hasExecutable && authenticated
 
     return {
@@ -91,7 +94,7 @@ export class CodexWorkerAdapter implements WorkerAdapter {
         : !hasExecutable
           ? 'Desktop CLI not detected on server'
           : ready
-            ? 'Installed and signed in'
+            ? (process.env.OPENAI_API_KEY?.trim() && !existsSync(join(codexHome, 'auth.json')) ? 'Ready (API Key)' : 'Installed and signed in')
             : 'Installed; select Connect to sign in',
       modes: ['research', 'review', 'implement'] as WorkerMode[],
       enabled: this.options.enabled,
@@ -101,6 +104,10 @@ export class CodexWorkerAdapter implements WorkerAdapter {
   }
 
   async run(input: WorkerRunInput, hooks: WorkerRunHooks): Promise<WorkerRunOutput> {
+    const provider = this.provider
+    if (provider.status !== 'ready') {
+      throw new Error(`Codex CLI is not ready: ${provider.statusLabel}`)
+    }
     if (this.active) throw new Error('Codex CLI is already running another task')
     const before = (await this.options.git.status()).entries
     const command = resolveExecutable('codex')
@@ -115,7 +122,7 @@ export class CodexWorkerAdapter implements WorkerAdapter {
 
     const child = spawn(command, args, {
       cwd: this.options.workspace,
-      env: cleanEnvironment(),
+      env: cleanEnvironment(this.options.codexHome),
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
       ...processGroupOptions(),

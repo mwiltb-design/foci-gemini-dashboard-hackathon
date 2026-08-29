@@ -27,14 +27,18 @@ ENV PI_PROJECTS_ROOT=/data/projects
 ENV PI_AGENT_DIR=/data/agent
 ENV PI_DASHBOARD_ANTIGRAVITY_HOME=/data/gemini
 ENV ANTIGRAVITY_HOME=/data/gemini
+ENV PI_DASHBOARD_CODEX_HOME=/data/codex
+ENV CODEX_HOME=/data/codex
 ENV FOCI_STATIC_UI_DIR=/app/ui/dist
 ENV PATH="/usr/local/bin:/home/node/.local/bin:${PATH}"
 
-# Install Antigravity CLI (agy) only as external CLI worker
-RUN curl -fsSL https://antigravity.google/cli/install.sh | bash && \
+# Install external CLI workers: Codex CLI (primary) and Antigravity CLI (secondary)
+RUN npm install -g @openai/codex && \
+    curl -fsSL https://antigravity.google/cli/install.sh | bash && \
     if [ -x /root/.local/bin/agy ]; then cp /root/.local/bin/agy /usr/local/bin/agy; elif command -v agy >/dev/null 2>&1; then cp "$(command -v agy)" /usr/local/bin/agy; fi && \
+    test -x /usr/local/bin/codex && /usr/local/bin/codex --version && \
     test -x /usr/local/bin/agy && /usr/local/bin/agy --version && \
-    (chmod -R 755 /usr/local/bin 2>/dev/null || true)
+    (chmod -R 755 /usr/local/bin /usr/local/lib/node_modules 2>/dev/null || true)
 
 COPY --from=deps /app/package*.json ./
 COPY --from=deps /app/server/package*.json ./server/
@@ -50,9 +54,10 @@ COPY server/templates ./server/templates
 COPY server/package*.json ./server/dist/server/
 COPY server/templates ./server/dist/server/templates
 
-RUN mkdir -p /data/dashboard/onboarding /data/projects /data/agent /data/gemini /workspace /home/node && \
+RUN mkdir -p /data/dashboard/onboarding /data/projects /data/agent /data/gemini /data/codex /workspace /home/node && \
     echo '{"schemaVersion":1,"completed":true,"dismissed":false,"appName":"Foci Dashboard","features":{"terminal":true,"workers":true}}' > /data/dashboard/onboarding/state.json && \
     ln -sfn /data/gemini /home/node/.gemini && \
+    ln -sfn /data/codex /home/node/.codex && \
     chown -R node:node /data /workspace /home/node
 USER node
 EXPOSE 8080

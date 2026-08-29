@@ -38,7 +38,7 @@ export function resolveEnabledWorkerProviders(): { allowedIds: string[] | undefi
 
   if (isCloudRun || isGeminiProvider) {
     return {
-      allowedIds: ['gemini-worker', 'antigravity-cli'],
+      allowedIds: ['codex-cli', 'gemini-worker', 'antigravity-cli'],
       isCloudMode: true,
     }
   }
@@ -165,7 +165,7 @@ export class WorkerCoordinator extends EventEmitter {
       archivePath: this.options.archivePath,
       configuration: config,
       rules,
-      ...(this.isFiltered ? { isFiltered: true, profileLabel: 'Gemini / Antigravity Cloud Profile' } : {}),
+      ...(this.isFiltered ? { isFiltered: true, profileLabel: 'Codex / Gemini / Antigravity Cloud Profile' } : {}),
     }
   }
 

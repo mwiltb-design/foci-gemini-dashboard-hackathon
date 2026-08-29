@@ -49,7 +49,7 @@ export class WorkerConsoleSession {
       const banner = [
         '\r\n\x1b[36m─────────────────────────────────────────────────────────────────────────────\x1b[0m\r\n',
         `\x1b[1;33m  ✦  ${friendlyName} (\`${rawBinary}\`) is not installed on this server.\x1b[0m\r\n\r\n`,
-        '  \x1b[32m✔\x1b[0m \x1b[1mIn Google Cloud Run:\x1b[0m Use the built-in \x1b[36mGemini Worker\x1b[0m for autonomous tasks.\r\n',
+        '  \x1b[32m✔\x1b[0m \x1b[1mIn Google Cloud Run:\x1b[0m Use \x1b[36mCodex CLI\x1b[0m as primary when authenticated, with Gemini Worker as fallback.\r\n',
         `  \x1b[32m✔\x1b[0m \x1b[1mFor ${friendlyName}:\x1b[0m Run Foci Dashboard on your local computer where the CLI is installed.\r\n`,
         '\x1b[36m─────────────────────────────────────────────────────────────────────────────\x1b[0m\r\n\r\n',
       ].join('')

@@ -48,6 +48,7 @@ test('WorkerRulesService: derives rules root from PI_DASHBOARD_DATA_DIR', async 
     await service.initialize()
     assert.equal(existsSync(join(tempDir, 'workers', 'config.json')), true)
     assert.equal(existsSync(join(tempDir, 'workers', 'WORKERS.md')), true)
+    assert.equal(existsSync(join(tempDir, 'workers', 'rules', 'codex.md')), true)
     assert.equal(existsSync(join(tempDir, 'workers', 'rules', 'gemini-worker.md')), true)
     assert.equal(existsSync(join(tempDir, 'workers', 'rules', 'antigravity.md')), true)
   } finally {

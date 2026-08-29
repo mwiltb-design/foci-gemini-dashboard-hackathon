@@ -48,19 +48,20 @@ export default function dashboardWorkers(pi: ExtensionAPI) {
   pi.registerTool({
     name: 'dashboard_delegate_worker',
     label: 'Delegate to Worker',
-    description: 'Send one bounded task to an enabled worker provider (Gemini Worker or Antigravity CLI). Consult WORKERS.md rules for provider specialization. Returns a concise result envelope; Primary agent must review all findings and changes.',
+    description: 'Send one bounded task to an enabled worker provider (Codex CLI, Gemini Worker, or Antigravity CLI). Consult WORKERS.md rules for provider specialization. Returns a concise result envelope; Primary agent must review all findings and changes.',
     promptSnippet: 'Delegate a narrow research, review, or implementation task to a specialized worker CLI',
     promptGuidelines: [
-      'Consult WORKERS.md routing rules when choosing a provider: gemini-worker for reliable Cloud Run-safe research/review/artifacts, antigravity-cli for deep repo/cloud/build/implementation work when authenticated.',
+      'Consult WORKERS.md routing rules when choosing a provider: codex-cli is primary for repo/code/test work, gemini-worker is the Cloud-native research/artifact fallback, and antigravity-cli is available for deep Google cloud/build work when authenticated.',
       'Use workers for narrow, bounded tasks with concrete deliverables.',
       'Review worker results and project changes yourself before presenting them as accepted.',
       'Do not delegate work that requires interactive user approval, credentials, or recursive worker delegation.',
     ],
     parameters: Type.Object({
       providerId: Type.Optional(Type.Union([
+        Type.Literal('codex-cli'),
         Type.Literal('gemini-worker'),
         Type.Literal('antigravity-cli'),
-      ], { description: 'Target worker provider. Defaults to gemini-worker if omitted.' })),
+      ], { description: 'Target worker provider. Defaults to codex-cli if omitted.' })),
       mode: Type.Union([
         Type.Literal('research'),
         Type.Literal('review'),
