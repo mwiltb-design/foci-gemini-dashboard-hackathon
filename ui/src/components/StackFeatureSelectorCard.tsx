@@ -27,23 +27,23 @@ const PRESET_DEFINITIONS: Record<'basic' | 'developer' | 'business', {
     icon: '★',
     subtitle: 'Clean & focused: Chat, Files, Terminal, and Gemini solo worker.',
     features: ['chat', 'files', 'files-editor', 'sessions', 'skills', 'settings', 'plugins', 'terminal', 'workers'],
-    providers: { 'sub-pi': true, 'antigravity-cli': false, 'codex-cli': false, 'claude-cli': false },
+    providers: { 'gemini-worker': true, 'antigravity-cli': false },
     showRulesEditor: false,
   },
   developer: {
     name: 'Developer',
     icon: '⚡',
-    subtitle: 'Full stack: Multi-agent CLIs (Antigravity & Codex), Rules Editor, & App Previewer.',
+    subtitle: 'Hackathon stack: Gemini Worker, Antigravity CLI, Rules Editor, and App Previewer.',
     features: ['chat', 'files', 'files-editor', 'sessions', 'skills', 'settings', 'plugins', 'terminal', 'workers', 'previewer'],
-    providers: { 'sub-pi': true, 'antigravity-cli': true, 'codex-cli': true, 'claude-cli': false },
+    providers: { 'gemini-worker': true, 'antigravity-cli': true },
     showRulesEditor: true,
   },
   business: {
-    name: 'Business',
+    name: 'Demo / Advanced',
     icon: '🏢',
-    subtitle: 'Advanced: Full worker stack, Automations/Cron, and Business integrations.',
+    subtitle: 'Gemini + Antigravity with Automations/Cron for richer demos.',
     features: ['chat', 'files', 'files-editor', 'sessions', 'skills', 'settings', 'plugins', 'terminal', 'workers', 'previewer', 'cron'],
-    providers: { 'sub-pi': true, 'antigravity-cli': true, 'codex-cli': true, 'claude-cli': true },
+    providers: { 'gemini-worker': true, 'antigravity-cli': true },
     showRulesEditor: true,
   },
 }
@@ -262,11 +262,11 @@ export function StackFeatureSelectorCard() {
                 <label className="feature-checkbox">
                   <input
                     type="checkbox"
-                    checked={data.providersEnabled['sub-pi'] ?? true}
-                    onChange={() => handleToggleProvider('sub-pi')}
+                    checked={data.providersEnabled['gemini-worker'] ?? true}
+                    onChange={() => handleToggleProvider('gemini-worker')}
                     disabled={busy}
                   />
-                  <span><strong>Gemini Worker</strong> — Built-in isolated Gemini agent</span>
+                  <span><strong>Gemini Worker</strong> — Cloud-native Gemini agent for reliable research, review, and artifacts</span>
                 </label>
                 <label className="feature-checkbox">
                   <input
@@ -275,25 +275,7 @@ export function StackFeatureSelectorCard() {
                     onChange={() => handleToggleProvider('antigravity-cli')}
                     disabled={busy}
                   />
-                  <span><strong>Antigravity CLI</strong> — Google Antigravity reasoning & research</span>
-                </label>
-                <label className="feature-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={data.providersEnabled['codex-cli'] ?? false}
-                    onChange={() => handleToggleProvider('codex-cli')}
-                    disabled={busy}
-                  />
-                  <span><strong>Codex CLI</strong> — OpenAI Codex TypeScript & test generation</span>
-                </label>
-                <label className="feature-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={data.providersEnabled['claude-cli'] ?? false}
-                    onChange={() => handleToggleProvider('claude-cli')}
-                    disabled={busy}
-                  />
-                  <span><strong>Claude CLI</strong> — Anthropic Claude documentation & code review</span>
+                  <span><strong>Antigravity CLI</strong> — Google Antigravity for deep repo, cloud, build, and implementation work</span>
                 </label>
                 <label className="feature-checkbox">
                   <input

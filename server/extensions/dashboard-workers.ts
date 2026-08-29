@@ -48,10 +48,10 @@ export default function dashboardWorkers(pi: ExtensionAPI) {
   pi.registerTool({
     name: 'dashboard_delegate_worker',
     label: 'Delegate to Worker',
-    description: 'Send one bounded task to an enabled worker provider (Gemini Worker, Sub PI, Antigravity CLI, Codex CLI, Claude CLI). Consult WORKERS.md rules for provider specialization. Returns a concise result envelope; Primary PI must review all findings and changes.',
+    description: 'Send one bounded task to an enabled worker provider (Gemini Worker or Antigravity CLI). Consult WORKERS.md rules for provider specialization. Returns a concise result envelope; Primary agent must review all findings and changes.',
     promptSnippet: 'Delegate a narrow research, review, or implementation task to a specialized worker CLI',
     promptGuidelines: [
-      'Consult WORKERS.md routing rules when choosing which provider to delegate to (e.g. antigravity-cli for science/deep reasoning, codex-cli for fast code/tests, claude-cli for docs/critique, sub-pi for native Pi tasks).',
+      'Consult WORKERS.md routing rules when choosing a provider: gemini-worker for reliable Cloud Run-safe research/review/artifacts, antigravity-cli for deep repo/cloud/build/implementation work when authenticated.',
       'Use workers for narrow, bounded tasks with concrete deliverables.',
       'Review worker results and project changes yourself before presenting them as accepted.',
       'Do not delegate work that requires interactive user approval, credentials, or recursive worker delegation.',
@@ -59,11 +59,8 @@ export default function dashboardWorkers(pi: ExtensionAPI) {
     parameters: Type.Object({
       providerId: Type.Optional(Type.Union([
         Type.Literal('gemini-worker'),
-        Type.Literal('sub-pi'),
         Type.Literal('antigravity-cli'),
-        Type.Literal('codex-cli'),
-        Type.Literal('claude-cli'),
-      ], { description: 'Target worker provider. Defaults to sub-pi if omitted.' })),
+      ], { description: 'Target worker provider. Defaults to gemini-worker if omitted.' })),
       mode: Type.Union([
         Type.Literal('research'),
         Type.Literal('review'),
@@ -113,7 +110,7 @@ export default function dashboardWorkers(pi: ExtensionAPI) {
           isError: task.status !== 'completed',
         }
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Sub PI delegation failed'
+        const message = error instanceof Error ? error.message : 'Worker delegation failed'
         return {
           content: [{ type: 'text', text: message }],
           details: {

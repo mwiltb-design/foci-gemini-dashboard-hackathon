@@ -13,7 +13,7 @@ interface GeminiAgentOptions {
   workerDelegate?: GeminiWorkerDelegate
 }
 
-const workerProviderIds = ['gemini-worker', 'sub-pi', 'antigravity-cli', 'codex-cli', 'claude-cli'] as const
+const workerProviderIds = ['gemini-worker', 'antigravity-cli'] as const
 const DEFAULT_GEMINI_MODEL = 'gemini-3.7-flash'
 const GEMINI_MODEL_IDS = [
   DEFAULT_GEMINI_MODEL,

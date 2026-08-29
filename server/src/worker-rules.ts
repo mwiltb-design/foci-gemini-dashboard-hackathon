@@ -15,92 +15,82 @@ const DEFAULT_CONFIG: WorkerConfiguration = {
   showRulesEditor: true,
   providersEnabled: {
     'gemini-worker': true,
-    'sub-pi': true,
     'antigravity-cli': true,
-    'codex-cli': true,
-    'claude-cli': false,
   },
   defaultBounds: DEFAULT_BOUNDS,
 }
 
-const DEFAULT_ROUTER_MD = `# Worker Delegation Router (Level 1)
+const DEFAULT_ROUTER_MD = `# Foci Hackathon Worker Router (Level 1)
 
-When deciding which worker to assign for a task, follow these guidelines:
+Foci Dashboard's Cloud Run hackathon profile uses two Google-centered workers only:
 
-## Provider Specializations
+- \`gemini-worker\` — in-process, Cloud Run-native Gemini worker powered by \`@google/genai\`.
+- \`antigravity-cli\` — Google Antigravity CLI worker for environments where \`agy\` is installed and authenticated.
 
-### 1. Antigravity CLI (\`antigravity-cli\`)
-- **Strengths**: Deep reasoning, science and academic research, complex multi-file refactoring, algorithm design, full codebase sweeps.
-- **Supported Modes**: \`research\` (investigation), \`review\` (critique/risks), \`implement\` (code changes & testing).
-- **Default Recommendation**: Primary choice for scientific research, in-depth architectural reasoning, and complex full-stack implementations.
+Do not route work to Codex, Claude, or Sub-Pi in the hackathon Cloud profile.
 
-### 2. Codex CLI (\`codex-cli\`)
-- **Strengths**: Fast TypeScript/React component generation, unit tests (vitest/jest), boilerplate scaffolding, rapid code iterations.
-- **Supported Modes**: \`research\`, \`review\`, \`implement\`.
-- **Default Recommendation**: Primary choice for fast frontend/backend code generation, writing test suites, and narrow bug fixes.
+## Default routing
 
-### 3. Claude CLI (\`claude-cli\`)
-- **Strengths**: Documentation writing, API design review, narrative structuring, markdown editing, high-level code critique.
-- **Supported Modes**: \`research\`, \`review\`, \`implement\`.
-- **Default Recommendation**: Primary choice for documentation, technical writing, and thorough code reviews.
+### Gemini Worker (\`gemini-worker\`)
+Use as the default worker in Cloud Run and whenever reliability matters.
 
-### 4. Sub PI (\`sub-pi\`)
-- **Strengths**: General-purpose isolated Pi sub-agent, plugin authoring, exploration without polluting main session history.
-- **Supported Modes**: \`research\`, \`review\`, \`implement\`.
-- **Default Recommendation**: Best for self-contained tasks, testing plugins, or running alternative models within Pi's native ecosystem.
+Best for:
+- Fast research, summaries, and comparisons.
+- Reviewing diffs, logs, configuration, and deployment output.
+- Producing patch plans or implementation artifacts when a CLI worker is unavailable.
+- Any task that must work from Gemini API credentials alone.
 
-## Core Rules & System Tools
+Modes:
+- \`research\`: concise investigation with exact file paths or evidence.
+- \`review\`: risks, bugs, regressions, and recommended fixes.
+- \`implement\`: create a concrete artifact/plan; do not claim direct code edits unless the worker actually wrote an artifact.
 
-1. **Strict Workspace Confinement**: All created files, edits, and artifacts MUST be written directly inside the active project directory. Do not write to \`~/.gemini\`, \`~/.codex\`, or external temp folders.
-2. **Available System CLIs**: Workers inherit the host environment and may execute pre-installed tools when in \`implement\` mode:
-   - **GitHub CLI (\`gh\`)**: For checking PRs (\`gh pr diff\`), inspecting issues (\`gh issue view\`), and repository metadata.
-   - **ripgrep (\`rg\`)**: For lightning-fast regex search across the codebase.
-   - **uv / npm / bun**: For package management and running project validation tests.
+### Antigravity CLI (\`antigravity-cli\`)
+Use only when the provider status is ready/authenticated. In Cloud Run, \`agy\` may be installed but unavailable until OAuth/token state exists.
+
+Best for:
+- Deep codebase and architecture sweeps.
+- Multi-file implementation tasks that need direct workspace edits.
+- Repo, build, Docker, Cloud Run, and git workflow work after explicit user approval.
+- Independent review of Gemini or primary-agent changes.
+
+Modes:
+- \`research\`: broad codebase investigation and evidence gathering.
+- \`review\`: detailed critique of uncommitted diffs or deployment risk.
+- \`implement\`: direct file edits and validation runs inside the workspace.
+
+## Routing rules
+
+1. Prefer \`gemini-worker\` for Cloud Run-safe tasks, quick answers, summaries, and fallback execution.
+2. Prefer \`antigravity-cli\` for complex repo/cloud/build work only when it is authenticated and the task benefits from full CLI workspace access.
+3. If \`antigravity-cli\` is unavailable or asks for interactive auth, do not wait or retry in the background; use \`gemini-worker\` or ask the user to complete Manage CLI login.
+4. Never delegate tasks that require secrets to be displayed, credentials to be copied into chat, or interactive approval inside a background worker.
+5. Keep worker tasks narrow, bounded, and review all worker findings before accepting them.
+6. All edits/artifacts must stay inside the active workspace. Do not write to external scratch folders except normal build/test caches.
+`
+
+const DEFAULT_GEMINI_MD = `# Gemini Worker Guidelines (Level 2)
+
+You are the built-in Gemini Worker for Foci Dashboard's Google hackathon Cloud profile.
+
+## Working Principles
+1. **Cloud-native first**: Assume you may be running in Cloud Run with only Gemini API credentials. Do not require external CLI login.
+2. **Task focus**: Answer the delegated prompt directly and stay inside the requested mode: research, review, or implement.
+3. **Evidence and paths**: Cite exact files, commands, endpoints, or observed outputs when reviewing technical work.
+4. **Implementation mode**: Produce concrete patch plans or workspace artifacts. Do not claim code was edited unless you actually created an artifact or file.
+5. **Structured result**: Return Summary, Actions Taken, Risks/Warnings, and Next Steps.
 `
 
 const DEFAULT_ANTIGRAVITY_MD = `# Antigravity CLI Guidelines (Level 2)
 
-You are operating as a dedicated Antigravity worker delegated a focused task by Pi Dashboard.
+You are the Antigravity CLI worker for Foci Dashboard's Google hackathon profile.
 
-## Working Principles:
-1. **Strict Workspace Confinement**: All created files, edits, and artifact generation MUST occur strictly within the active project workspace root. Do NOT write to ~/.gemini, scratch directories, or temporary paths.
-2. **Be Rigorous & Precise**: Analyze the codebase thoroughly before making changes.
-3. **Type Safety & Validation**: In \`implement\` mode, ensure TypeScript compiles cleanly (\`npx tsc --noEmit\` or relevant project build command).
-4. **Structured Summary**: Conclude your work with a concise breakdown of:
-   - Summary of findings or changes made.
-   - List of modified/created files inside the project.
-   - Any remaining risks, warnings, or next steps.
-`
-
-const DEFAULT_CODEX_MD = `# Codex CLI Guidelines (Level 2)
-
-You are operating as a dedicated Codex worker delegated a focused task by Pi Dashboard.
-
-## Working Principles:
-1. **Strict Workspace Confinement**: All created files, edits, and tests MUST occur strictly within the active project workspace root. Do NOT write to ~/.codex or external paths.
-2. **Idiomatic & Clean Code**: Write concise, modern TypeScript/JavaScript adhering to project conventions.
-3. **Minimal Dependencies**: Do not add external npm packages unless strictly requested.
-4. **Structured Summary**: Return a concise summary of all changes made, validation steps run, and touched files.
-`
-
-const DEFAULT_CLAUDE_MD = `# Claude CLI Guidelines (Level 2)
-
-You are operating as a dedicated Claude worker delegated a focused task by Pi Dashboard.
-
-## Working Principles:
-1. **Strict Workspace Confinement**: All created files, edits, documentation, and reviews MUST occur strictly within the active project workspace root. Do NOT write to ~/.claude, temporary paths, or directories outside the workspace.
-2. **Clear Explanations & Architecture**: Provide thorough explanations, clean documentation, and well-structured code.
-3. **Review & Critique**: In \`review\` mode, highlight actionable suggestions and potential security or performance pitfalls.
-4. **Structured Summary**: Summarize your actions, changes, and key takeaways clearly.
-`
-
-const DEFAULT_SUB_PI_MD = `# Sub PI Guidelines (Level 2)
-
-You are operating as a focused Sub PI worker executing a delegated task in a separate Pi session.
-
-## Working Principles:
-1. **Task Focus**: Stick strictly to the delegated task. Do not wander outside the scope of the prompt.
-2. **Keep Result Concise**: Primary Pi will receive your text output to incorporate into the main conversation. Keep your final summary direct and informative.
+## Working Principles
+1. **Authentication required**: Only run when \`agy\` is installed and authenticated. If OAuth or interactive login is required, stop and report that Manage CLI login is needed.
+2. **Strict workspace confinement**: All edits and artifacts must remain inside the active project workspace. Do not modify credential stores such as \`~/.gemini\` unless the user explicitly asked for CLI account management.
+3. **Best use cases**: Deep codebase searches, architecture reviews, Docker/Cloud Run/git work, and multi-file implementation tasks.
+4. **Validation**: In \`implement\` mode, run focused checks such as \`npm --prefix server run build\`, \`npm --prefix ui run build\`, tests, Docker build, or smoke checks when practical.
+5. **Structured result**: Report files changed, commands run, validation results, deployment/git actions, and remaining risks.
 `
 
 export class WorkerRulesService {
@@ -127,19 +117,20 @@ export class WorkerRulesService {
         await writeFile(this.configFile, `${JSON.stringify(DEFAULT_CONFIG, null, 2)}\n`, 'utf8')
       }
 
-      // Seed WORKERS.md (Level 1)
+      // Seed or migrate WORKERS.md (Level 1)
       try {
         await stat(this.routerFile)
+        const existingRouter = await readFile(this.routerFile, 'utf8')
+        const looksLikeLegacyDefault = existingRouter.includes('Codex CLI') && existingRouter.includes('Claude CLI') && existingRouter.includes('Sub PI') && !existingRouter.includes('gemini-worker')
+        if (looksLikeLegacyDefault) await writeFile(this.routerFile, DEFAULT_ROUTER_MD, 'utf8')
       } catch {
         await writeFile(this.routerFile, DEFAULT_ROUTER_MD, 'utf8')
       }
 
       // Seed Level 2 rule files
       const defaultRules: Record<string, string> = {
+        'gemini-worker.md': DEFAULT_GEMINI_MD,
         'antigravity.md': DEFAULT_ANTIGRAVITY_MD,
-        'codex.md': DEFAULT_CODEX_MD,
-        'claude.md': DEFAULT_CLAUDE_MD,
-        'sub-pi.md': DEFAULT_SUB_PI_MD,
       }
 
       for (const [filename, content] of Object.entries(defaultRules)) {
@@ -193,6 +184,13 @@ export class WorkerRulesService {
 
   async listRules(): Promise<WorkerRuleFile[]> {
     const rules: WorkerRuleFile[] = []
+    const envFilter = process.env.FOCI_ENABLED_WORKERS?.trim()
+    const cloudProfile = Boolean(process.env.K_SERVICE) || (process.env.FOCI_AGENT_PROVIDER ?? process.env.PI_DASHBOARD_AGENT_PROVIDER ?? '').toLowerCase() === 'gemini'
+    const allowedProviders = envFilter && envFilter !== '*' && envFilter.toLowerCase() !== 'all'
+      ? new Set(envFilter.split(',').map((id) => id.trim()).filter(Boolean))
+      : cloudProfile && envFilter !== '*' && envFilter?.toLowerCase() !== 'all'
+        ? new Set(['gemini-worker', 'antigravity-cli'])
+        : undefined
 
     // 1. Level 1 Router
     try {
@@ -219,10 +217,8 @@ export class WorkerRulesService {
 
     // 2. Level 2 Worker Rules
     const providerMapping: Record<string, { id: string; title: string; providerId: string }> = {
+      'gemini-worker.md': { id: 'rule-gemini-worker', title: 'Gemini Worker Guidelines', providerId: 'gemini-worker' },
       'antigravity.md': { id: 'rule-antigravity', title: 'Antigravity CLI Guidelines', providerId: 'antigravity-cli' },
-      'codex.md': { id: 'rule-codex', title: 'Codex CLI Guidelines', providerId: 'codex-cli' },
-      'claude.md': { id: 'rule-claude', title: 'Claude CLI Guidelines', providerId: 'claude-cli' },
-      'sub-pi.md': { id: 'rule-sub-pi', title: 'Sub PI Guidelines', providerId: 'sub-pi' },
     }
 
     try {
@@ -238,15 +234,17 @@ export class WorkerRulesService {
             title: `${file.replace('.md', '').toUpperCase()} Guidelines`,
             providerId: file.replace('.md', ''),
           }
-          rules.push({
-            id: meta.id,
-            title: meta.title,
-            fileName: file,
-            level: 2,
-            providerId: meta.providerId,
-            content,
-            updatedAt: fileStat.mtime.toISOString(),
-          })
+          if (!allowedProviders || allowedProviders.has(meta.providerId)) {
+            rules.push({
+              id: meta.id,
+              title: meta.title,
+              fileName: file,
+              level: 2,
+              providerId: meta.providerId,
+              content,
+              updatedAt: fileStat.mtime.toISOString(),
+            })
+          }
         } catch {}
       }
     } catch {}
@@ -273,10 +271,16 @@ export class WorkerRulesService {
       fileName = 'WORKERS.md'
     } else {
       const cleanId = id.replace(/^rule-/, '').replace(/\.md$/, '')
-      fileName = `${cleanId}.md`
+      const providerMap: Record<string, { fileName: string; title: string; providerId: string }> = {
+        'gemini-worker': { fileName: 'gemini-worker.md', title: 'Gemini Worker Guidelines', providerId: 'gemini-worker' },
+        antigravity: { fileName: 'antigravity.md', title: 'Antigravity CLI Guidelines', providerId: 'antigravity-cli' },
+        'antigravity-cli': { fileName: 'antigravity.md', title: 'Antigravity CLI Guidelines', providerId: 'antigravity-cli' },
+      }
+      const mapped = providerMap[cleanId]
+      fileName = mapped?.fileName ?? `${cleanId}.md`
       targetPath = join(this.rulesDir, fileName)
-      title = `${cleanId.toUpperCase()} Guidelines`
-      providerId = cleanId.endsWith('-cli') ? cleanId : `${cleanId}-cli`
+      title = mapped?.title ?? `${cleanId.toUpperCase()} Guidelines`
+      providerId = mapped?.providerId ?? (cleanId.endsWith('-cli') || cleanId === 'gemini-worker' ? cleanId : `${cleanId}-cli`)
     }
 
     await writeFile(targetPath, content, 'utf8')
@@ -294,7 +298,7 @@ export class WorkerRulesService {
   }
 
   async getInjectedRulesForWorker(providerId: string): Promise<string> {
-    const cleanId = providerId.replace(/-cli$/, '')
+    const cleanId = providerId === 'gemini-worker' ? 'gemini-worker' : providerId.replace(/-cli$/, '')
     const targetFile = join(this.rulesDir, `${cleanId}.md`)
     try {
       return (await readFile(targetFile, 'utf8')).trim()
