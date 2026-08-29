@@ -20,12 +20,20 @@ const proxy = {
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: [
+      { find: /^@xterm\/xterm$/, replacement: '@xterm/xterm/lib/xterm.js' },
+    ],
+  },
   optimizeDeps: {
     exclude: ['@xterm/xterm'],
   },
   esbuild: {
     keepNames: true,
     minifyIdentifiers: false,
+  },
+  build: {
+    minify: false,
   },
   server: {
     port,
