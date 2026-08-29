@@ -81,7 +81,11 @@ export function ProviderLogin() {
 
     connection.onmessage = (event) => {
       const bytes = typeof event.data === 'string' ? new TextEncoder().encode(event.data) : new Uint8Array(event.data as ArrayBuffer)
-      terminal.write(bytes)
+      try {
+        terminal.write(bytes)
+      } catch (err) {
+        console.warn('[ProviderLogin] write error:', err)
+      }
       linkBuffer = `${linkBuffer}${decoder.decode(bytes, { stream: true })}`.slice(-8_000)
       const found = linkBuffer.match(/https?:\/\/[^\s\x1b<>"']+/g) ?? []
       if (found.length) setLinks((current) => [...new Set([...current, ...found])].slice(-3))

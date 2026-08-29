@@ -1,12 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { resolveEnabledWorkerProviders, WorkerCoordinator } from '../src/worker-coordinator.js'
-import { AntigravityWorkerAdapter } from '../src/antigravity-worker.js'
+import { AntigravityWorkerAdapter, cleanEnvironment } from '../src/antigravity-worker.js'
 import { GeminiWorkerAdapter } from '../src/gemini-worker.js'
 import { SubPiWorkerAdapter } from '../src/sub-pi-worker.js'
 import { WorkerRulesService } from '../src/worker-rules.js'
 import { GitService } from '../src/git-service.js'
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -89,6 +89,7 @@ test('AntigravityWorkerAdapter: does not mark API-key-only auth ready unless exp
   if (process.platform !== 'win32') chmodSync(fakeAgy, 0o755)
   delete process.env.GEMINI_API_KEY
   delete process.env.GOOGLE_API_KEY
+  delete process.env.FOCI_ANTIGRAVITY_API_KEY_AUTH
   process.env.PATH = `${tempDir}${process.platform === 'win32' ? ';' : ':'}${origPath ?? ''}`
 
   const git = new GitService(process.cwd())
@@ -117,6 +118,109 @@ test('AntigravityWorkerAdapter: does not mark API-key-only auth ready unless exp
     if (origPath) process.env.PATH = origPath; else delete process.env.PATH
     rmSync(tempDir, { recursive: true, force: true })
   }
+})
+
+test('AntigravityWorkerAdapter: does not treat directory existence as authenticated and requires concrete token file', () => {
+  const origGemini = process.env.GEMINI_API_KEY
+  const origGoogle = process.env.GOOGLE_API_KEY
+  const origAllow = process.env.FOCI_ANTIGRAVITY_API_KEY_AUTH
+  const origPath = process.env.PATH
+  const tempDir = mkdtempSync(join(tmpdir(), 'agy-dir-auth-test-'))
+  const fakeAgy = join(tempDir, process.platform === 'win32' ? 'agy.cmd' : 'agy')
+  const fakeHome = join(tempDir, 'gemini-home')
+  const fakeCliDir = join(fakeHome, 'antigravity-cli')
+  mkdirSync(fakeCliDir, { recursive: true })
+  writeFileSync(fakeAgy, process.platform === 'win32' ? '@echo off\necho agy test\n' : '#!/bin/sh\necho agy test\n')
+  if (process.platform !== 'win32') chmodSync(fakeAgy, 0o755)
+  delete process.env.GEMINI_API_KEY
+  delete process.env.GOOGLE_API_KEY
+  delete process.env.FOCI_ANTIGRAVITY_API_KEY_AUTH
+  process.env.PATH = `${tempDir}${process.platform === 'win32' ? ';' : ':'}${origPath ?? ''}`
+
+  const git = new GitService(process.cwd())
+  const adapter = new AntigravityWorkerAdapter({
+    workspace: process.cwd(),
+    git,
+    enabled: true,
+    antigravityHome: fakeHome,
+  })
+
+  try {
+    // 1. Directory exists, but no token file present -> not ready
+    let provider = adapter.provider
+    assert.equal(provider.id, 'antigravity-cli')
+    assert.equal(provider.status, 'unavailable')
+    assert.match(provider.statusLabel, /select Connect to sign in/)
+
+    // 2. Concrete token file created -> ready
+    const tokenFile = join(fakeCliDir, 'antigravity-oauth-token')
+    writeFileSync(tokenFile, 'valid-token-data', 'utf8')
+
+    provider = adapter.provider
+    assert.equal(provider.status, 'ready')
+    assert.equal(provider.statusLabel, 'Installed and ready')
+  } finally {
+    if (origGemini) process.env.GEMINI_API_KEY = origGemini; else delete process.env.GEMINI_API_KEY
+    if (origGoogle) process.env.GOOGLE_API_KEY = origGoogle; else delete process.env.GOOGLE_API_KEY
+    if (origAllow) process.env.FOCI_ANTIGRAVITY_API_KEY_AUTH = origAllow; else delete process.env.FOCI_ANTIGRAVITY_API_KEY_AUTH
+    if (origPath) process.env.PATH = origPath; else delete process.env.PATH
+    rmSync(tempDir, { recursive: true, force: true })
+  }
+})
+
+test('AntigravityWorkerAdapter: fast-fails in run() when provider status is not ready', async () => {
+  const origGemini = process.env.GEMINI_API_KEY
+  const origGoogle = process.env.GOOGLE_API_KEY
+  const origAllow = process.env.FOCI_ANTIGRAVITY_API_KEY_AUTH
+  const origPath = process.env.PATH
+  const tempDir = mkdtempSync(join(tmpdir(), 'agy-fast-fail-test-'))
+  const fakeAgy = join(tempDir, process.platform === 'win32' ? 'agy.cmd' : 'agy')
+  const fakeHome = join(tempDir, 'gemini-home')
+  writeFileSync(fakeAgy, process.platform === 'win32' ? '@echo off\necho agy test\n' : '#!/bin/sh\necho agy test\n')
+  if (process.platform !== 'win32') chmodSync(fakeAgy, 0o755)
+  delete process.env.GEMINI_API_KEY
+  delete process.env.GOOGLE_API_KEY
+  delete process.env.FOCI_ANTIGRAVITY_API_KEY_AUTH
+  process.env.PATH = `${tempDir}${process.platform === 'win32' ? ';' : ':'}${origPath ?? ''}`
+
+  const git = new GitService(process.cwd())
+  const adapter = new AntigravityWorkerAdapter({
+    workspace: process.cwd(),
+    git,
+    enabled: true,
+    antigravityHome: fakeHome,
+  })
+
+  try {
+    assert.equal(adapter.provider.status, 'unavailable')
+    await assert.rejects(
+      () => adapter.run({
+        taskId: 'test-unready-task',
+        providerId: 'antigravity-cli',
+        mode: 'research',
+        prompt: 'test prompt',
+        bounds: { turnLimit: 2, timeoutMs: 10000, resultLimitBytes: 1024 },
+      }, {
+        onProgress: async () => {},
+      }),
+      /Antigravity CLI is not ready/,
+    )
+  } finally {
+    if (origGemini) process.env.GEMINI_API_KEY = origGemini; else delete process.env.GEMINI_API_KEY
+    if (origGoogle) process.env.GOOGLE_API_KEY = origGoogle; else delete process.env.GOOGLE_API_KEY
+    if (origAllow) process.env.FOCI_ANTIGRAVITY_API_KEY_AUTH = origAllow; else delete process.env.FOCI_ANTIGRAVITY_API_KEY_AUTH
+    if (origPath) process.env.PATH = origPath; else delete process.env.PATH
+    rmSync(tempDir, { recursive: true, force: true })
+  }
+})
+
+test('cleanEnvironment: configures CI and NONINTERACTIVE for background workers', () => {
+  const env = cleanEnvironment('/custom/gemini-home')
+  assert.equal(env.CI, '1')
+  assert.equal(env.NONINTERACTIVE, '1')
+  assert.equal(env.ANTIGRAVITY_HOME, '/custom/gemini-home')
+  assert.equal(env.PI_DASHBOARD_AUTH_TOKEN, undefined)
+  assert.equal(env.PI_DASHBOARD_WORKER_INTERNAL_TOKEN, undefined)
 })
 
 test('WorkerCoordinator: filters snapshot and denies disallowed providers in cloud mode', async () => {
@@ -153,3 +257,4 @@ test('WorkerCoordinator: filters snapshot and denies disallowed providers in clo
     rmSync(tempDir, { recursive: true, force: true })
   }
 })
+

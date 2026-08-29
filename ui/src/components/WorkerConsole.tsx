@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
@@ -82,23 +82,37 @@ export function WorkerConsole({ providerId, providerName, mode, onClose, onStatu
         if (message.type === 'ready') {
           ready = true
           terminal.options.disableStdin = false
-          terminal.clear()
+          try {
+            terminal.clear()
+          } catch {}
           resize()
-          terminal.focus()
+          try {
+            terminal.focus()
+          } catch {}
         } else if (message.type === 'output' && typeof message.data === 'string') {
-          terminal.write(message.data)
+          try {
+            terminal.write(message.data)
+          } catch (writeErr) {
+            console.warn(`[WorkerConsole] Terminal write parser error for ${providerName}:`, writeErr)
+          }
           linkBuffer = `${linkBuffer}${message.data}`.slice(-8_000)
           const found = linkBuffer.match(/https?:\/\/[^\s\x1b<>"']+/g) ?? []
           if (found.length) setLinks((current) => [...new Set([...current, ...found])].slice(-4))
         } else if (message.type === 'error') {
           setError(message.message ?? `${providerName} console error`)
-          terminal.writeln(`\r\n\x1b[31m${message.message ?? 'Console error'}\x1b[0m`)
+          try {
+            terminal.writeln(`\r\n\x1b[31m${message.message ?? 'Console error'}\x1b[0m`)
+          } catch {}
         } else if (message.type === 'exit') {
-          terminal.writeln(`\r\n\x1b[38;5;245mConsole session ended${typeof message.exitCode === 'number' ? ` with code ${message.exitCode}` : ''}.\x1b[0m`)
+          try {
+            terminal.writeln(`\r\n\x1b[38;5;245mConsole session ended${typeof message.exitCode === 'number' ? ` with code ${message.exitCode}` : ''}.\x1b[0m`)
+          } catch {}
           onStatusChangeRef.current()
         }
       } catch {
-        terminal.writeln('\r\n\x1b[31mInvalid console response.\x1b[0m')
+        try {
+          terminal.writeln('\r\n\x1b[31mInvalid console response.\x1b[0m')
+        } catch {}
       }
     })
 
@@ -108,7 +122,9 @@ export function WorkerConsole({ providerId, providerName, mode, onClose, onStatu
 
     socket.addEventListener('close', (event) => {
       ready = false
-      terminal.options.disableStdin = true
+      try {
+        terminal.options.disableStdin = true
+      } catch {}
       if (event.code !== 1000 && !event.wasClean) {
         setError(event.reason || `${providerName} console closed.`)
       }
@@ -122,7 +138,9 @@ export function WorkerConsole({ providerId, providerName, mode, onClose, onStatu
         socket.send(JSON.stringify({ type: 'close' }))
       }
       socket.close()
-      terminal.dispose()
+      try {
+        terminal.dispose()
+      } catch {}
     }
   }, [providerId, providerName, mode])
 

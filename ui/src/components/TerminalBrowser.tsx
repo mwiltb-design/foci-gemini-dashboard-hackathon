@@ -68,16 +68,19 @@ function TerminalSession({ shell, onStatus }: { shell: ShellType; onStatus: (sta
           onStatus('ready')
           resize()
           terminal.focus()
-        } else if (message.type === 'output' && typeof message.data === 'string') terminal.write(message.data)
-        else if (message.type === 'error') {
+        } else if (message.type === 'output' && typeof message.data === 'string') {
+          try { terminal.write(message.data) } catch (err) { console.warn('[TerminalBrowser] write error:', err) }
+        } else if (message.type === 'error') {
           failed = true
-          terminal.writeln(`\r\n\x1b[31m${message.message ?? 'Terminal error'}\x1b[0m`)
+          try { terminal.writeln(`\r\n\x1b[31m${message.message ?? 'Terminal error'}\x1b[0m`) } catch {}
           onStatus('error', message.message)
         } else if (message.type === 'exit') {
-          terminal.writeln(`\r\n\x1b[38;5;245mShell exited${typeof message.exitCode === 'number' ? ` with code ${message.exitCode}` : ''}.\x1b[0m`)
+          try { terminal.writeln(`\r\n\x1b[38;5;245mShell exited${typeof message.exitCode === 'number' ? ` with code ${message.exitCode}` : ''}.\x1b[0m`) } catch {}
           onStatus('closed')
         }
-      } catch { terminal.writeln('\r\n\x1b[31mInvalid terminal response.\x1b[0m') }
+      } catch {
+        try { terminal.writeln('\r\n\x1b[31mInvalid terminal response.\x1b[0m') } catch {}
+      }
     })
     socket.addEventListener('open', () => onStatus('connecting'))
     socket.addEventListener('error', () => {

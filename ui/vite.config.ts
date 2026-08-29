@@ -20,6 +20,13 @@ const proxy = {
 
 export default defineConfig({
   plugins: [react()],
+  optimizeDeps: {
+    exclude: ['@xterm/xterm'],
+  },
+  esbuild: {
+    keepNames: true,
+    minifyIdentifiers: false,
+  },
   server: {
     port,
     allowedHosts,

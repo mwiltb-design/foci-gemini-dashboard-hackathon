@@ -1,10 +1,18 @@
 import { spawn, type ChildProcess } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { GitService, GitStatusEntry } from './git-service.js'
 import { findExecutable, processGroupOptions, resolveExecutable, terminateProcess } from './process-control.js'
 import type { WorkerAdapter, WorkerChangedFile, WorkerMode, WorkerProviderStatus, WorkerRunHooks, WorkerRunInput, WorkerRunOutput } from './worker-types.js'
+
+function hasConcreteFile(path: string): boolean {
+  try {
+    return statSync(path).isFile()
+  } catch {
+    return false
+  }
+}
 
 function boundedText(value: string, limit: number): { text: string; truncated: boolean } {
   const text = value.trim()
@@ -43,7 +51,7 @@ function workerPrompt(input: WorkerRunInput, workspace: string): string {
   ].join('\n')
 }
 
-function cleanEnvironment(antigravityHome?: string): NodeJS.ProcessEnv {
+export function cleanEnvironment(antigravityHome?: string): NodeJS.ProcessEnv {
   const environment = { ...process.env }
 
   // Strip dashboard and internal tokens to prevent credential exposure
@@ -62,6 +70,10 @@ function cleanEnvironment(antigravityHome?: string): NodeJS.ProcessEnv {
   if (antigravityHome) {
     environment.ANTIGRAVITY_HOME = antigravityHome
   }
+
+  // Non-interactive and CI indicators for background worker execution
+  environment.CI = '1'
+  environment.NONINTERACTIVE = '1'
 
   return environment
 }
@@ -84,7 +96,15 @@ export class AntigravityWorkerAdapter implements WorkerAdapter {
     const cliHome = join(defaultHome, 'antigravity-cli')
     const hasApiKey = Boolean(process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim())
     const allowApiKeyAuth = ['1', 'true', 'yes'].includes((process.env.FOCI_ANTIGRAVITY_API_KEY_AUTH ?? '').toLowerCase())
-    const hasLocalAuth = existsSync(join(cliHome, 'antigravity-oauth-token')) || existsSync(join(defaultHome, 'antigravity-cli'))
+    const tokenPaths = [
+      join(cliHome, 'antigravity-oauth-token'),
+      join(cliHome, 'oauth_credentials.json'),
+      join(cliHome, 'auth.json'),
+      join(defaultHome, 'antigravity-oauth-token'),
+      join(defaultHome, 'oauth_credentials.json'),
+      join(defaultHome, 'auth.json'),
+    ]
+    const hasLocalAuth = tokenPaths.some((tokenPath) => hasConcreteFile(tokenPath))
     const authenticated = hasLocalAuth || (allowApiKeyAuth && hasApiKey)
     const ready = this.options.enabled && hasExecutable && authenticated
 
@@ -99,7 +119,7 @@ export class AntigravityWorkerAdapter implements WorkerAdapter {
         : !hasExecutable
           ? 'Desktop CLI not detected on server'
           : ready
-            ? (allowApiKeyAuth && hasApiKey ? 'Ready (API Key)' : 'Installed and ready')
+            ? (allowApiKeyAuth && hasApiKey && !hasLocalAuth ? 'Ready (API Key)' : 'Installed and ready')
             : hasApiKey
               ? 'Installed; API key detected but Antigravity CLI requires OAuth in this runtime'
               : 'Installed; select Connect to sign in',
@@ -111,6 +131,10 @@ export class AntigravityWorkerAdapter implements WorkerAdapter {
   }
 
   async run(input: WorkerRunInput, hooks: WorkerRunHooks): Promise<WorkerRunOutput> {
+    const provider = this.provider
+    if (provider.status !== 'ready') {
+      throw new Error(`Antigravity CLI is not ready: ${provider.statusLabel}`)
+    }
     if (this.active) throw new Error('Antigravity CLI is already running another task')
     const before = (await this.options.git.status()).entries
     const timeout = `${Math.max(60, Math.ceil(input.bounds.timeoutMs / 1_000))}s`
