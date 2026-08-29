@@ -44,6 +44,7 @@ function workerPrompt(input: WorkerRunInput): string {
 export interface SubPiWorkerOptions {
   workspace: string
   sessionDir?: string
+  agentDir?: string
   pluginToolsExtension: string
   pluginStateRoot?: string
   pluginCodeRoot?: string
@@ -81,6 +82,7 @@ export class SubPiWorkerAdapter implements WorkerAdapter {
       args,
       env: {
         PI_DASHBOARD_WORKER_MODE: input.mode,
+        ...(this.options.agentDir ? { PI_AGENT_DIR: this.options.agentDir } : {}),
         ...(this.options.pluginStateRoot ? { PI_DASHBOARD_PLUGIN_STATE_ROOT: this.options.pluginStateRoot } : {}),
         ...(this.options.pluginCodeRoot ? { PI_DASHBOARD_PLUGIN_CODE_ROOT: this.options.pluginCodeRoot } : {}),
         ...(this.options.authoringSkillPath ? { PI_DASHBOARD_PLUGIN_AUTHORING_SKILL_PATH: this.options.authoringSkillPath } : {}),

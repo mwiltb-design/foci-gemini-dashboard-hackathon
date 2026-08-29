@@ -22,7 +22,11 @@ ENV NODE_ENV=production
 ENV PORT=8080
 ENV HOST=0.0.0.0
 ENV FOCI_AGENT_PROVIDER=gemini
-ENV PI_DASHBOARD_WORKSPACE=/workspace
+ENV PI_DASHBOARD_DATA_DIR=/data/dashboard
+ENV PI_PROJECTS_ROOT=/data/projects
+ENV PI_AGENT_DIR=/data/agent
+ENV PI_DASHBOARD_ANTIGRAVITY_HOME=/data/gemini
+ENV ANTIGRAVITY_HOME=/data/gemini
 ENV FOCI_STATIC_UI_DIR=/app/ui/dist
 ENV PATH="/usr/local/bin:/home/node/.local/bin:${PATH}"
 
@@ -46,9 +50,10 @@ COPY server/templates ./server/templates
 COPY server/package*.json ./server/dist/server/
 COPY server/templates ./server/dist/server/templates
 
-RUN mkdir -p /workspace /home/node/.gemini /home/node/.pi-dashboard/onboarding && \
-    echo '{"schemaVersion":1,"completed":true,"dismissed":false,"appName":"Foci Dashboard","features":{"terminal":true,"workers":true}}' > /home/node/.pi-dashboard/onboarding/state.json && \
-    chown -R node:node /workspace /home/node
+RUN mkdir -p /data/dashboard/onboarding /data/projects /data/agent /data/gemini /workspace /home/node && \
+    echo '{"schemaVersion":1,"completed":true,"dismissed":false,"appName":"Foci Dashboard","features":{"terminal":true,"workers":true}}' > /data/dashboard/onboarding/state.json && \
+    ln -sfn /data/gemini /home/node/.gemini && \
+    chown -R node:node /data /workspace /home/node
 USER node
 EXPOSE 8080
 CMD ["node", "server/dist/server/src/index.js"]

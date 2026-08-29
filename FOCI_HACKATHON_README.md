@@ -84,3 +84,23 @@ gcloud run deploy foci-dashboard \
 For Google-authenticated access, remove `--allow-unauthenticated`. For simple dashboard password protection on a public demo URL, store `PI_DASHBOARD_AUTH_TOKEN` as a separate Secret Manager secret and add it to `--set-secrets` rather than placing it in `.env` or `--set-env-vars`; the static login UI and health probes remain reachable before token login.
 
 If the hackathon publishes a different exact Gemini model ID, update `GEMINI_MODEL` and `GEMINI_WORKER_MODEL`.
+
+## Persistence & Environment Variable Routing
+
+When deploying to Cloud Run with persistent storage (such as a mounted GCS volume at `/data` or persistent disk), configure the following environment variables:
+
+| Environment Variable | Description | Default | Cloud Container Default |
+|---|---|---|---|
+| `PI_DASHBOARD_DATA_DIR` (or `FOCI_DASHBOARD_DATA_DIR`) | Base directory for dashboard metadata, project sessions, activity log, worker rules/tasks, onboarding, and plugins | `~/.pi-dashboard` | `/data/dashboard` |
+| `PI_PROJECTS_ROOT` (or `PI_DASHBOARD_PROJECTS_ROOT` / `FOCI_PROJECTS_ROOT`) | Directory containing all project workspaces | `~/Pi-Dashboards` | `/data/projects` |
+| `PI_AGENT_DIR` (or `FOCI_AGENT_DIR`) | Directory containing agent identity (`USER.md`), global collaboration memory (`MEMORY.md`), and settings | `~/.pi/agent` | `/data/agent` |
+| `PI_DASHBOARD_WORKSPACE` (or `FOCI_WORKSPACE`) | Explicit active workspace override. If unset, restores the last active project from `<data-dir>/active-workspace.json`, or defaults to `<projects-root>/Default` | Unset (auto-restores) | Unset (auto-restores) |
+| `PI_DASHBOARD_WORKER_RULES_ROOT` | Optional override for worker rules and configurations | `<data-dir>/workers` | `/data/dashboard/workers` |
+| `PI_DASHBOARD_ANTIGRAVITY_HOME` / `ANTIGRAVITY_HOME` | Antigravity CLI credential/config directory. In the container, `/home/node/.gemini` is symlinked here so Manage CLI OAuth state persists on the mounted volume. | `~/.gemini` | `/data/gemini` |
+| `FOCI_ENABLED_WORKERS` | Comma-separated list of enabled worker providers | `gemini-worker,antigravity-cli` (in cloud mode) | `gemini-worker,antigravity-cli` |
+
+### Active Workspace Persistence
+- When a user creates or switches projects in the UI (`/api/projects/switch`), the selected active workspace path is recorded in `<data-dir>/active-workspace.json`.
+- On container startup or server restart, if no explicit `PI_DASHBOARD_WORKSPACE` is passed, the server automatically restores the previously selected active project.
+- Non-active projects in `PI_PROJECTS_ROOT` are preserved and remain selectable in the Projects modal.
+

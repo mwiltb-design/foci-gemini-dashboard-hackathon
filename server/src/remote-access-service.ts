@@ -22,7 +22,7 @@ export class RemoteAccessService {
   }
 
   constructor(customPath?: string) {
-    const dataDir = resolve(homedir(), '.pi-dashboard')
+    const dataDir = process.env.PI_DASHBOARD_DATA_DIR ?? process.env.FOCI_DASHBOARD_DATA_DIR ?? resolve(homedir(), '.pi-dashboard')
     try { mkdirSync(dataDir, { recursive: true }) } catch {}
     this.configPath = customPath ?? resolve(dataDir, 'remote-access.json')
     this.data = this.load()

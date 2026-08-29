@@ -1,4 +1,4 @@
-﻿import { createHash } from 'node:crypto'
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { homedir } from 'node:os'
@@ -17,7 +17,13 @@ export class ProjectService {
   readonly rootDir: string
 
   constructor(customRootDir?: string) {
-    this.rootDir = resolve(customRootDir || process.env.PI_PROJECTS_ROOT || resolve(homedir(), 'Pi-Dashboards'))
+    this.rootDir = resolve(
+      customRootDir ||
+      process.env.PI_PROJECTS_ROOT ||
+      process.env.PI_DASHBOARD_PROJECTS_ROOT ||
+      process.env.FOCI_PROJECTS_ROOT ||
+      resolve(homedir(), 'Pi-Dashboards')
+    )
     try { mkdirSync(this.rootDir, { recursive: true }) } catch {}
   }
 

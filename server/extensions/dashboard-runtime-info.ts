@@ -5,7 +5,8 @@ import { mkdir, rename, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 
-const outputPath = process.env.PI_DASHBOARD_RUNTIME_INFO_PATH ?? resolve(homedir(), '.pi/agent/dashboard/runtime-tools.json')
+const defaultAgentDir = process.env.PI_AGENT_DIR ?? process.env.FOCI_AGENT_DIR ?? resolve(homedir(), '.pi/agent')
+const outputPath = process.env.PI_DASHBOARD_RUNTIME_INFO_PATH ?? resolve(defaultAgentDir, 'dashboard/runtime-tools.json')
 
 export default function dashboardRuntimeInfo(pi: ExtensionAPI) {
   let writeChain = Promise.resolve()

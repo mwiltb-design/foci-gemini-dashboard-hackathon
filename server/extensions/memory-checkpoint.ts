@@ -11,7 +11,7 @@ import {
   type MemoryCheckpointStatus,
 } from '../src/memory-checkpoint.js'
 
-const defaultAgentDir = resolve(homedir(), '.pi/agent')
+const defaultAgentDir = process.env.PI_AGENT_DIR ?? process.env.FOCI_AGENT_DIR ?? resolve(homedir(), '.pi/agent')
 const memoryPath = process.env.PI_DASHBOARD_MEMORY_PATH ?? resolve(defaultAgentDir, 'MEMORY.md')
 const settingsPath = process.env.PI_DASHBOARD_MEMORY_CHECKPOINT_SETTINGS_PATH ?? resolve(defaultAgentDir, 'dashboard/memory-checkpoint/settings.json')
 const statusPath = process.env.PI_DASHBOARD_MEMORY_CHECKPOINT_STATUS_PATH ?? resolve(defaultAgentDir, 'dashboard/memory-checkpoint/status.json')

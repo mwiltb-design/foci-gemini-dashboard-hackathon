@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent'
 import { normalizeCuratedMemorySettings } from '../src/curated-memory.js'
 
-const agentDir = process.env.PI_AGENT_DIR ?? resolve(homedir(), '.pi/agent')
+const agentDir = process.env.PI_AGENT_DIR ?? process.env.FOCI_AGENT_DIR ?? resolve(homedir(), '.pi/agent')
 const workspace = process.env.PI_DASHBOARD_WORKSPACE ?? process.cwd()
 const settingsPath = process.env.PI_DASHBOARD_CURATED_MEMORY_SETTINGS_PATH ?? resolve(agentDir, 'dashboard/curated-memory/settings.json')
 const userPath = process.env.PI_DASHBOARD_USER_PROFILE_PATH ?? resolve(agentDir, 'USER.md')

@@ -49,12 +49,52 @@ const staticUiDir = process.env.FOCI_STATIC_UI_DIR
   ?? [resolve(moduleDir, '../../ui/dist'), resolve(moduleDir, '../../../../ui/dist')].find((candidate) => existsSync(candidate))
   ?? resolve(moduleDir, '../../ui/dist')
 const defaultHomeAgentDir = resolve(homedir(), '.pi/agent')
-const defaultDashboardDataDir = resolve(homedir(), '.pi-dashboard')
+const agentDir = process.env.PI_AGENT_DIR ?? process.env.FOCI_AGENT_DIR ?? defaultHomeAgentDir
+try { mkdirSync(agentDir, { recursive: true }) } catch {}
+
+const defaultDashboardDataDir = process.env.PI_DASHBOARD_DATA_DIR ?? process.env.FOCI_DASHBOARD_DATA_DIR ?? resolve(homedir(), '.pi-dashboard')
 try { mkdirSync(defaultDashboardDataDir, { recursive: true }) } catch {}
 
-const defaultProjectsRoot = resolve(homedir(), 'Pi-Dashboards')
+const defaultProjectsRoot = resolve(process.env.PI_PROJECTS_ROOT ?? process.env.PI_DASHBOARD_PROJECTS_ROOT ?? process.env.FOCI_PROJECTS_ROOT ?? resolve(homedir(), 'Pi-Dashboards'))
+try { mkdirSync(defaultProjectsRoot, { recursive: true }) } catch {}
+
 const defaultWorkspace = resolve(defaultProjectsRoot, 'Default')
-let workspace = resolve(process.env.PI_DASHBOARD_WORKSPACE ?? defaultWorkspace)
+const activeWorkspaceFile = resolve(defaultDashboardDataDir, 'active-workspace.json')
+
+function loadPersistedActiveWorkspace(): string | undefined {
+  try {
+    if (existsSync(activeWorkspaceFile)) {
+      const parsed = JSON.parse(readFileSync(activeWorkspaceFile, 'utf8')) as unknown
+      if (parsed && typeof parsed === 'object' && typeof (parsed as Record<string, unknown>).workspace === 'string') {
+        const candidate = resolve(((parsed as Record<string, unknown>).workspace as string).trim())
+        if (candidate) return candidate
+      }
+    }
+  } catch {}
+  return undefined
+}
+
+function persistActiveWorkspace(ws: string): void {
+  try {
+    mkdirSync(defaultDashboardDataDir, { recursive: true })
+    writeFileSync(activeWorkspaceFile, JSON.stringify({ workspace: ws, updatedAt: new Date().toISOString() }, null, 2), 'utf8')
+  } catch {}
+}
+
+function resolveInitialWorkspace(): string {
+  const explicit = process.env.PI_DASHBOARD_WORKSPACE ?? process.env.FOCI_WORKSPACE
+  if (explicit && explicit.trim()) {
+    return resolve(explicit.trim())
+  }
+  const persisted = loadPersistedActiveWorkspace()
+  if (persisted) {
+    return persisted
+  }
+  return defaultWorkspace
+}
+
+let workspace = resolveInitialWorkspace()
+persistActiveWorkspace(workspace)
 let workspaceKey = createHash('sha256').update(workspace.toLowerCase()).digest('hex').slice(0, 12)
 let projectSlug = basename(workspace).toLowerCase().replace(/[^a-z0-9_-]/g, '-') || 'default'
 let projectDataDir = resolve(defaultDashboardDataDir, 'projects', `${projectSlug}-${workspaceKey}`)
@@ -78,7 +118,6 @@ try {
     writeFileSync(memoryFile, template, 'utf8')
   }
 } catch {}
-const agentDir = process.env.PI_AGENT_DIR ?? defaultHomeAgentDir
 let rpcSessionDir = process.env.PI_RPC_SESSION_DIR ?? resolve(projectDataDir, 'sessions')
 let sessionRoot = process.env.PI_SESSION_ROOT ?? rpcSessionDir
 let activityPath = process.env.PI_DASHBOARD_ACTIVITY_PATH ?? resolve(projectDataDir, 'activity.jsonl')
@@ -147,6 +186,7 @@ let rpc = registerRpcListeners(useGeminiAgent
     cwd: workspace,
     args: rpcArgs,
     env: {
+      PI_AGENT_DIR: agentDir,
       PI_DASHBOARD_WORKER_INTERNAL_TOKEN: workerInternalToken,
       PI_DASHBOARD_PLUGIN_STATE_ROOT: pluginStateRoot,
       PI_DASHBOARD_PLUGIN_CODE_ROOT: pluginCodeRoot,
@@ -161,13 +201,14 @@ let git = new GitService(workspace)
 let skills = new SkillService(workspace, agentDir)
 let system = new SystemService(workspace, agentDir)
 let onboarding = new OnboardingService(workspace, agentDir, defaultDashboardDataDir)
-const projectService = new ProjectService()
+const projectService = new ProjectService(defaultProjectsRoot)
 const tools = new ToolService(runtimeInfoPath)
 let plugins = new PluginService({ bundledRoot: pluginCodeRoot, stateRoot: pluginStateRoot, workspaceRoot: workspace, runtimeSocketRoot: pluginRuntimeSocketRoot, assetCapability: pluginAssetCapability, localRepositoryRoot: pluginLocalRepositoryRoot })
 let activity = new ActivityStore(activityPath)
 const providerLogin = new ProviderLoginSession()
 const workerConsoleSession = new WorkerConsoleSession()
-const workerRules = new WorkerRulesService()
+const workerRulesRootDir = process.env.PI_DASHBOARD_WORKER_RULES_ROOT ?? resolve(defaultDashboardDataDir, 'workers')
+const workerRules = new WorkerRulesService(workerRulesRootDir)
 const workerBounds = {
   turnLimit: positiveLimit(process.env.PI_DASHBOARD_WORKER_TURN_LIMIT, 8, 1),
   timeoutMs: positiveLimit(process.env.PI_DASHBOARD_WORKER_TIMEOUT_MS, 10 * 60_000, 60_000),
@@ -176,6 +217,7 @@ const workerBounds = {
 let subPi = new SubPiWorkerAdapter({
   workspace,
   sessionDir: rpcSessionDir,
+  agentDir,
   pluginToolsExtension,
   pluginStateRoot,
   pluginCodeRoot,
@@ -345,6 +387,7 @@ async function switchActiveWorkspace(targetWorkspace: string): Promise<{ workspa
   await rpc.stop()
 
   workspace = targetWorkspace
+  persistActiveWorkspace(workspace)
   workspaceKey = createHash('sha256').update(workspace.toLowerCase()).digest('hex').slice(0, 12)
   projectSlug = basename(workspace).toLowerCase().replace(/[^a-z0-9_-]/g, '-') || 'workspace'
   projectDataDir = resolve(defaultDashboardDataDir, 'projects', `${projectSlug}-${workspaceKey}`)
@@ -377,6 +420,7 @@ async function switchActiveWorkspace(targetWorkspace: string): Promise<{ workspa
   subPi = new SubPiWorkerAdapter({
     workspace,
     sessionDir: currentRpcSessionDir,
+    agentDir,
     pluginToolsExtension,
     pluginStateRoot,
     pluginCodeRoot,
@@ -430,6 +474,7 @@ async function switchActiveWorkspace(targetWorkspace: string): Promise<{ workspa
       cwd: workspace,
       args: rpcArgs,
       env: {
+        PI_AGENT_DIR: agentDir,
         PI_DASHBOARD_WORKER_INTERNAL_TOKEN: workerInternalToken,
         PI_DASHBOARD_PLUGIN_STATE_ROOT: pluginStateRoot,
         PI_DASHBOARD_PLUGIN_CODE_ROOT: pluginCodeRoot,

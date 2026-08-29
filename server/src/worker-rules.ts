@@ -100,7 +100,10 @@ export class WorkerRulesService {
   readonly routerFile: string
 
   constructor(customRootDir?: string) {
-    this.rootDir = customRootDir ? resolve(customRootDir) : resolve(homedir(), '.pi-dashboard/workers')
+    const defaultDataDir = process.env.PI_DASHBOARD_DATA_DIR ?? process.env.FOCI_DASHBOARD_DATA_DIR ?? resolve(homedir(), '.pi-dashboard')
+    this.rootDir = customRootDir
+      ? resolve(customRootDir)
+      : resolve(process.env.PI_DASHBOARD_WORKER_RULES_ROOT ?? resolve(defaultDataDir, 'workers'))
     this.rulesDir = join(this.rootDir, 'rules')
     this.configFile = join(this.rootDir, 'config.json')
     this.routerFile = join(this.rootDir, 'WORKERS.md')
