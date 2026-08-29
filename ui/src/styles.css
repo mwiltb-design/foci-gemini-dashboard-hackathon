@@ -1254,8 +1254,10 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 .worker-console > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 11px 12px; border-bottom: 1px solid var(--line); }
 .worker-console h2 { margin: 2px 0 0; font-size: 14px; }
 .worker-console header p { margin: 4px 0 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
-.worker-console__terminal { height: clamp(360px, 50vh, 600px); padding: 8px 4px 4px 8px; overflow: hidden; background: #07100d; }
+.worker-console__terminal { height: clamp(360px, 50vh, 600px); padding: 8px 4px 4px 8px; overflow: hidden; background: #07100d; position: relative; contain: size layout; box-sizing: border-box; }
 .worker-console__terminal .xterm { height: 100%; }
+.worker-console__terminal .xterm-screen { height: 100%; }
+.worker-console__terminal .xterm-viewport { overflow-y: auto !important; }
 .worker-console__links { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 11px; border-top: 1px solid var(--line); font-size: 10px; }
 .worker-console__links a { color: var(--accent); }
 .worker-console > footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 11px; border-top: 1px solid var(--line); }

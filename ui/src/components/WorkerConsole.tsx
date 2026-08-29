@@ -50,24 +50,51 @@ export function WorkerConsole({ providerId, providerName, mode, onClose, onStatu
     const socket = new WebSocket(socketUrl(providerId, mode))
     let ready = false
     let linkBuffer = ''
+    let lastCols = 0
+    let lastRows = 0
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null
+    let resizeRaf: number | null = null
 
-    const sendResize = () => {
+    const sendResize = (cols: number, rows: number) => {
       if (!ready || socket.readyState !== WebSocket.OPEN) return
-      socket.send(JSON.stringify({ type: 'resize', cols: terminal.cols, rows: terminal.rows }))
+      if (cols <= 0 || rows <= 0) return
+      if (cols === lastCols && rows === lastRows) return
+      lastCols = cols
+      lastRows = rows
+      socket.send(JSON.stringify({ type: 'resize', cols, rows }))
     }
 
-    const resize = () => {
+    const performFit = () => {
       try {
+        if (!element.isConnected || element.clientWidth <= 0 || element.clientHeight <= 0) return
         fit.fit()
-        sendResize()
+        if (terminal.cols > 0 && terminal.rows > 0) {
+          sendResize(terminal.cols, terminal.rows)
+        }
       } catch {
         /* hidden or unmounted */
       }
     }
 
-    const observer = new ResizeObserver(resize)
+    const scheduleResize = () => {
+      if (resizeRaf !== null) cancelAnimationFrame(resizeRaf)
+      resizeRaf = requestAnimationFrame(() => {
+        resizeRaf = null
+        if (resizeTimer !== null) clearTimeout(resizeTimer)
+        resizeTimer = setTimeout(() => {
+          resizeTimer = null
+          performFit()
+        }, 50)
+      })
+    }
+
+    const observer = new ResizeObserver(() => {
+      scheduleResize()
+    })
     observer.observe(element)
-    requestAnimationFrame(resize)
+    requestAnimationFrame(() => {
+      performFit()
+    })
 
     const input = terminal.onData((data) => {
       if (ready && socket.readyState === WebSocket.OPEN) {
@@ -85,7 +112,7 @@ export function WorkerConsole({ providerId, providerName, mode, onClose, onStatu
           try {
             terminal.clear()
           } catch {}
-          resize()
+          performFit()
           try {
             terminal.focus()
           } catch {}
@@ -95,9 +122,19 @@ export function WorkerConsole({ providerId, providerName, mode, onClose, onStatu
           } catch (writeErr) {
             console.warn(`[WorkerConsole] Terminal write parser error for ${providerName}:`, writeErr)
           }
-          linkBuffer = `${linkBuffer}${message.data}`.slice(-8_000)
-          const found = linkBuffer.match(/https?:\/\/[^\s\x1b<>"']+/g) ?? []
-          if (found.length) setLinks((current) => [...new Set([...current, ...found])].slice(-4))
+          if (message.data.includes('http://') || message.data.includes('https://') || linkBuffer.includes('http')) {
+            linkBuffer = `${linkBuffer}${message.data}`.slice(-8_000)
+            const found = linkBuffer.match(/https?:\/\/[^\s\x1b<>"']+/g) ?? []
+            if (found.length) {
+              setLinks((current) => {
+                const merged = [...new Set([...current, ...found])].slice(-4)
+                if (merged.length === current.length && merged.every((val, idx) => val === current[idx])) {
+                  return current
+                }
+                return merged
+              })
+            }
+          }
         } else if (message.type === 'error') {
           setError(message.message ?? `${providerName} console error`)
           try {
@@ -132,6 +169,8 @@ export function WorkerConsole({ providerId, providerName, mode, onClose, onStatu
     })
 
     return () => {
+      if (resizeRaf !== null) cancelAnimationFrame(resizeRaf)
+      if (resizeTimer !== null) clearTimeout(resizeTimer)
       observer.disconnect()
       input.dispose()
       if (socket.readyState === WebSocket.OPEN) {

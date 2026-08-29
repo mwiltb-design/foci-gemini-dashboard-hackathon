@@ -1,6 +1,8 @@
 import { spawn } from 'node:child_process'
 import { EventEmitter } from 'node:events'
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
+import { randomBytes } from 'node:crypto'
 import { dirname, resolve, sep } from 'node:path'
 import { FunctionCallingConfigMode, GoogleGenAI, Type, type Content, type FunctionDeclaration, type Part } from '@google/genai'
 import type { JsonObject, RpcEvent, RpcResponse } from './types.js'
@@ -126,6 +128,8 @@ export class GeminiAgentProcess extends EventEmitter {
   private requestCounter = 0
   private sessionId = `gemini-${Date.now()}`
   private sessionName = 'Gemini Cloud Session'
+  private sessionFilePath?: string
+  private lastEntryId: string | null = null
   private contents: Content[] = []
   private dashboardMessages: DashboardMessage[] = []
   private model: string
@@ -147,6 +151,7 @@ export class GeminiAgentProcess extends EventEmitter {
     this.runningState = true
     await mkdir(this.options.cwd, { recursive: true }).catch(() => undefined)
     if (this.options.sessionDir) await mkdir(this.options.sessionDir, { recursive: true }).catch(() => undefined)
+    await this.initSessionFile().catch(() => undefined)
     queueMicrotask(() => this.emit('ready'))
   }
 
@@ -167,7 +172,14 @@ export class GeminiAgentProcess extends EventEmitter {
     const type = String(command.type ?? '')
     try {
       if (type === 'get_state') return this.response(id, type, this.state())
-      if (type === 'get_session_stats') return this.response(id, type, { contextUsage: { tokens: null, contextWindow: 1_000_000, percent: null } })
+      if (type === 'get_session_stats') {
+        const toolCallCount = this.dashboardMessages.filter((m) => m.role === 'assistant' && Array.isArray(m.content) && m.content.some((b) => b.type === 'toolCall')).length
+        return this.response(id, type, {
+          totalMessages: this.dashboardMessages.length,
+          toolCalls: toolCallCount,
+          contextUsage: { tokens: null, contextWindow: this.model.includes('pro') ? 2_000_000 : 1_000_000, percent: null },
+        })
+      }
       if (type === 'get_messages') return this.response(id, type, { messages: this.dashboardMessages })
       if (type === 'get_available_models') {
         return this.response(id, type, { models: this.availableModels() })
@@ -184,11 +196,21 @@ export class GeminiAgentProcess extends EventEmitter {
         return this.response(id, type, this.state())
       }
       if (type === 'new_session') {
-        this.newSession()
+        await this.newSession()
         return this.response(id, type, this.state())
       }
       if (type === 'set_session_name') {
         this.sessionName = typeof command.name === 'string' && command.name.trim() ? command.name.trim().slice(0, 100) : this.sessionName
+        const entryId = randomBytes(4).toString('hex')
+        const entry = {
+          type: 'session_info',
+          id: entryId,
+          parentId: this.lastEntryId,
+          timestamp: new Date().toISOString(),
+          name: this.sessionName,
+        }
+        this.lastEntryId = entryId
+        await this.appendSessionEntry(entry)
         return this.response(id, type, this.state())
       }
       if (type === 'abort') {
@@ -200,7 +222,16 @@ export class GeminiAgentProcess extends EventEmitter {
         await this.prompt(message)
         return this.response(id, type, this.state())
       }
-      if (type === 'switch_session' || type === 'fork' || type === 'clone') return this.response(id, type, this.state())
+      if (type === 'switch_session') {
+        const sessionPath = typeof command.sessionPath === 'string' ? command.sessionPath : ''
+        await this.loadSession(sessionPath)
+        return this.response(id, type, this.state())
+      }
+      if (type === 'fork' || type === 'clone') {
+        const entryIdParam = typeof command.entryId === 'string' ? command.entryId : undefined
+        await this.forkSession(entryIdParam)
+        return this.response(id, type, this.state())
+      }
       throw new Error(`Unsupported Gemini RPC command: ${type}`)
     } catch (error) {
       return { id, type: 'response', command: type, success: false, error: errorMessage(error) }
@@ -217,6 +248,7 @@ export class GeminiAgentProcess extends EventEmitter {
       thinkingLevel: this.thinkingLevel,
       isStreaming: this.isStreaming,
       sessionId: this.sessionId,
+      sessionFile: this.sessionFilePath,
       sessionName: this.sessionName,
       messageCount: this.dashboardMessages.length,
     }
@@ -233,12 +265,182 @@ export class GeminiAgentProcess extends EventEmitter {
     }))
   }
 
-  private newSession(): void {
+  private async initSessionFile(): Promise<string> {
+    if (this.sessionFilePath && existsSync(this.sessionFilePath)) {
+      return this.sessionFilePath
+    }
+    const sessionDir = this.options.sessionDir || resolve(this.options.cwd, '.pi/sessions')
+    await mkdir(sessionDir, { recursive: true }).catch(() => undefined)
+    const filePath = resolve(sessionDir, `${this.sessionId}.jsonl`)
+    this.sessionFilePath = filePath
+
+    if (existsSync(filePath)) {
+      return filePath
+    }
+
+    const header = {
+      type: 'session',
+      version: 1,
+      id: this.sessionId,
+      timestamp: new Date().toISOString(),
+      cwd: resolve(this.options.cwd),
+    }
+    const infoEntryId = randomBytes(4).toString('hex')
+    const infoEntry = {
+      type: 'session_info',
+      id: infoEntryId,
+      parentId: null,
+      timestamp: new Date().toISOString(),
+      name: this.sessionName,
+    }
+    this.lastEntryId = infoEntryId
+
+    const content = `${JSON.stringify(header)}\n${JSON.stringify(infoEntry)}\n`
+    await writeFile(filePath, content, 'utf8')
+    return filePath
+  }
+
+  private async appendSessionEntry(entry: Record<string, unknown>): Promise<void> {
+    try {
+      await this.initSessionFile()
+      if (!this.sessionFilePath) return
+      await appendFile(this.sessionFilePath, `${JSON.stringify(entry)}\n`, 'utf8')
+    } catch (err) {
+      console.warn('[GeminiAgentProcess] Failed to append session entry:', err)
+    }
+  }
+
+  private async newSession(): Promise<void> {
     this.abortController?.abort()
     this.sessionId = `gemini-${Date.now()}`
     this.sessionName = 'Gemini Cloud Session'
     this.contents = []
     this.dashboardMessages = []
+    this.lastEntryId = null
+    this.sessionFilePath = undefined
+    await this.initSessionFile()
+  }
+
+  private async loadSession(sessionPath: string): Promise<void> {
+    this.abortController?.abort()
+    const resolvedPath = resolve(sessionPath)
+    const content = await readFile(resolvedPath, 'utf8')
+    const lines = content.split('\n').filter(Boolean)
+    const records = lines.flatMap((line) => {
+      try { return [JSON.parse(line) as Record<string, unknown>] } catch { return [] }
+    })
+    const header = records[0]
+    if (!header || header.type !== 'session') throw new Error('Invalid session file')
+
+    this.sessionId = String(header.id || `gemini-${Date.now()}`)
+    this.sessionFilePath = resolvedPath
+    this.sessionName = 'Gemini Cloud Session'
+    this.contents = []
+    this.dashboardMessages = []
+    this.lastEntryId = null
+
+    const entries = records.slice(1)
+    for (const entry of entries) {
+      if (entry.id && typeof entry.id === 'string') this.lastEntryId = entry.id
+      if (entry.type === 'session_info' && typeof entry.name === 'string' && entry.name.trim()) {
+        this.sessionName = entry.name.trim()
+      } else if (entry.type === 'message' && entry.message && typeof entry.message === 'object') {
+        const msg = entry.message as Record<string, unknown>
+        const role = msg.role as string
+        if (role === 'user') {
+          const text = Array.isArray(msg.content)
+            ? msg.content.filter((b: any) => b && typeof b === 'object' && b.type === 'text' && typeof b.text === 'string').map((b: any) => b.text).join('')
+            : (typeof msg.content === 'string' ? msg.content : '')
+          this.dashboardMessages.push({ role: 'user', content: [{ type: 'text', text }] })
+          this.contents.push({ role: 'user', parts: [{ text }] })
+        } else if (role === 'assistant') {
+          const text = Array.isArray(msg.content)
+            ? msg.content.filter((b: any) => b && typeof b === 'object' && b.type === 'text' && typeof b.text === 'string').map((b: any) => b.text).join('')
+            : (typeof msg.content === 'string' ? msg.content : '')
+          const toolCalls = Array.isArray(msg.content)
+            ? msg.content.filter((b: any) => b && typeof b === 'object' && b.type === 'toolCall')
+            : []
+          if (toolCalls.length > 0) {
+            this.dashboardMessages.push({ role: 'assistant', content: toolCalls })
+            this.contents.push({
+              role: 'model',
+              parts: [
+                ...(text ? [{ text }] : []),
+                ...toolCalls.map((tc: any) => ({
+                  functionCall: { id: tc.id, name: tc.name, args: tc.arguments ?? {} },
+                })),
+              ],
+            })
+          } else if (text) {
+            this.dashboardMessages.push({ role: 'assistant', content: [{ type: 'text', text }] })
+            this.contents.push({ role: 'model', parts: [{ text }] })
+          }
+        } else if (role === 'toolResult') {
+          const output = Array.isArray(msg.content)
+            ? msg.content.filter((b: any) => b && typeof b === 'object' && b.type === 'text' && typeof b.text === 'string').map((b: any) => b.text).join('')
+            : (typeof msg.content === 'string' ? msg.content : '')
+          const toolCallId = typeof msg.toolCallId === 'string' ? msg.toolCallId : undefined
+          const toolName = typeof msg.toolName === 'string' ? msg.toolName : undefined
+          this.dashboardMessages.push({
+            role: 'toolResult',
+            toolCallId,
+            toolName,
+            isError: Boolean(msg.isError),
+            content: [{ type: 'text', text: output }],
+          })
+          this.contents.push({
+            role: 'user',
+            parts: [{
+              functionResponse: {
+                id: toolCallId,
+                name: toolName || 'unknown_tool',
+                response: msg.isError ? { error: output } : { output },
+              },
+            }],
+          })
+        }
+      }
+    }
+  }
+
+  private async forkSession(targetEntryId?: string): Promise<void> {
+    this.abortController?.abort()
+    const parentSessionId = this.sessionId
+    const newSessionId = `gemini-${Date.now()}`
+    const sessionDir = this.options.sessionDir || resolve(this.options.cwd, '.pi/sessions')
+    await mkdir(sessionDir, { recursive: true }).catch(() => undefined)
+    const newFilePath = resolve(sessionDir, `${newSessionId}.jsonl`)
+
+    const header = {
+      type: 'session',
+      version: 1,
+      id: newSessionId,
+      timestamp: new Date().toISOString(),
+      cwd: resolve(this.options.cwd),
+      parentSession: parentSessionId,
+    }
+
+    let recordsToCopy: Array<Record<string, unknown>> = []
+    if (this.sessionFilePath && existsSync(this.sessionFilePath)) {
+      try {
+        const fileContent = await readFile(this.sessionFilePath, 'utf8')
+        const allRecords = fileContent.split('\n').filter(Boolean).flatMap((line) => {
+          try { return [JSON.parse(line) as Record<string, unknown>] } catch { return [] }
+        })
+        const entries = allRecords.slice(1)
+        if (targetEntryId) {
+          const targetIndex = entries.findIndex((e) => e.id === targetEntryId)
+          recordsToCopy = targetIndex !== -1 ? entries.slice(0, targetIndex + 1) : entries
+        } else {
+          recordsToCopy = entries
+        }
+      } catch {}
+    }
+
+    const lines = [JSON.stringify(header), ...recordsToCopy.map((r) => JSON.stringify(r))].join('\n') + '\n'
+    await writeFile(newFilePath, lines, 'utf8')
+
+    await this.loadSession(newFilePath)
   }
 
   private async prompt(message: string): Promise<void> {
@@ -251,6 +453,21 @@ export class GeminiAgentProcess extends EventEmitter {
     const userMessage: DashboardMessage = { role: 'user', content: textContent(message) }
     this.dashboardMessages.push(userMessage)
     this.contents.push({ role: 'user', parts: [{ text: message }] })
+
+    const userEntryId = randomBytes(4).toString('hex')
+    const userEntry = {
+      type: 'message',
+      id: userEntryId,
+      parentId: this.lastEntryId,
+      timestamp: new Date().toISOString(),
+      message: {
+        role: 'user',
+        content: textContent(message),
+      },
+    }
+    this.lastEntryId = userEntryId
+    await this.appendSessionEntry(userEntry)
+
     this.emitEvent({ type: 'agent_start' })
     this.emitEvent({ type: 'message_start', message: userMessage })
     this.emitEvent({ type: 'message_start', message: { role: 'assistant', content: textContent('') } })
@@ -272,17 +489,63 @@ export class GeminiAgentProcess extends EventEmitter {
           ...(roundText ? [{ text: roundText }] : []),
           ...functionCallParts,
         ] })
-        const pendingTools = functionCallParts.map(async (part) => {
+
+        const toolCallsForEntry = functionCallParts.map((part) => {
           const call = part.functionCall!
           const toolCallId = call.id || `gemini-tool-${Date.now()}-${Math.random().toString(36).slice(2)}`
           const toolName = call.name || 'unknown_tool'
           const args = call.args ?? {}
-          this.dashboardMessages.push({ role: 'assistant', content: [{ type: 'toolCall', id: toolCallId, name: toolName, arguments: args }] })
+          return { type: 'toolCall', id: toolCallId, name: toolName, arguments: args }
+        })
+
+        const assistantEntryId = randomBytes(4).toString('hex')
+        const assistantEntry = {
+          type: 'message',
+          id: assistantEntryId,
+          parentId: this.lastEntryId,
+          timestamp: new Date().toISOString(),
+          message: {
+            role: 'assistant',
+            model: this.model,
+            content: [
+              ...(roundText ? [{ type: 'text', text: roundText }] : []),
+              ...toolCallsForEntry,
+            ],
+          },
+        }
+        this.lastEntryId = assistantEntryId
+        await this.appendSessionEntry(assistantEntry)
+
+        const pendingTools = functionCallParts.map(async (part, idx) => {
+          const call = part.functionCall!
+          const toolCallItem = toolCallsForEntry[idx]
+          const toolCallId = toolCallItem.id
+          const toolName = toolCallItem.name
+          const args = toolCallItem.arguments
+          this.dashboardMessages.push({ role: 'assistant', content: [toolCallItem] })
           this.emitEvent({ type: 'tool_execution_start', toolCallId, toolName, args })
           const result = await this.executeTool(toolName, args)
           const output = result.ok ? result.output : result.error
           this.dashboardMessages.push({ role: 'toolResult', toolCallId, toolName, isError: !result.ok, content: textContent(output) })
           this.emitEvent({ type: 'tool_execution_end', toolCallId, toolName, isError: !result.ok, result: { content: textContent(output) } })
+
+          const toolResultEntryId = randomBytes(4).toString('hex')
+          const toolResultEntry = {
+            type: 'message',
+            id: toolResultEntryId,
+            parentId: this.lastEntryId,
+            timestamp: new Date().toISOString(),
+            message: {
+              role: 'toolResult',
+              toolCallId,
+              toolName,
+              isError: !result.ok,
+              content: textContent(output),
+            },
+          }
+          this.lastEntryId = toolResultEntryId
+          await this.appendSessionEntry(toolResultEntry)
+
           return { functionResponse: { id: call.id, name: toolName, response: result.ok ? { output } : { error: output } } }
         })
         const functionResponses = await Promise.all(pendingTools)
@@ -290,6 +553,24 @@ export class GeminiAgentProcess extends EventEmitter {
       }
       const assistantMessage: DashboardMessage = { role: 'assistant', content: textContent(assistantText) }
       this.dashboardMessages.push(assistantMessage)
+
+      if (assistantText) {
+        const finalAssistantEntryId = randomBytes(4).toString('hex')
+        const finalAssistantEntry = {
+          type: 'message',
+          id: finalAssistantEntryId,
+          parentId: this.lastEntryId,
+          timestamp: new Date().toISOString(),
+          message: {
+            role: 'assistant',
+            model: this.model,
+            content: textContent(assistantText),
+          },
+        }
+        this.lastEntryId = finalAssistantEntryId
+        await this.appendSessionEntry(finalAssistantEntry)
+      }
+
       this.emitEvent({ type: 'message_end', message: assistantMessage })
     } catch (error) {
       this.emitEvent({ type: 'message_update', assistantMessageEvent: { type: 'error', reason: errorMessage(error) } })
