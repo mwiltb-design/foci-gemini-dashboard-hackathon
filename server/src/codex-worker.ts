@@ -4,7 +4,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import type { GitService, GitStatusEntry } from './git-service.js'
-import { processGroupOptions, resolveExecutable, terminateProcess } from './process-control.js'
+import { findExecutable, processGroupOptions, resolveExecutable, terminateProcess } from './process-control.js'
 import type { WorkerAdapter, WorkerChangedFile, WorkerMode, WorkerProviderStatus, WorkerRunHooks, WorkerRunInput, WorkerRunOutput } from './worker-types.js'
 
 function boundedText(value: string, limit: number): { text: string; truncated: boolean } {
@@ -27,37 +27,39 @@ function changedFiles(before: GitStatusEntry[], after: GitStatusEntry[]): Worker
 }
 
 function codexPrompt(input: WorkerRunInput, workspace: string): string {
-  const policy = input.mode === 'implement'
-    ? 'You may edit files inside the current project workspace and run focused validation. Do not commit, push, access credentials, or change external systems.'
+  const role = input.mode === 'implement'
+    ? 'You have permission to inspect and edit files inside the current workspace. Implement the requested changes and verify correctness.'
     : input.mode === 'review'
-      ? 'Review only. Do not edit files or run commands that change project or external state.'
-      : 'Research this project only. Stay read-only and do not change project or external state.'
+      ? 'Review the project read-only. Identify risks, defects, and concrete recommendations.'
+      : 'Research the project read-only and report concise, evidence-based findings.'
 
   const rules = input.ruleContext ? `\n\nGuidelines:\n${input.ruleContext}\n` : ''
 
-  return `You are a bounded Codex worker reporting back to Pi Dashboard.
+  return `You are a bounded Codex CLI worker reporting back to Pi Dashboard.
 
 Active Project Workspace: ${workspace}
 CRITICAL WORKSPACE CONFINEMENT:
 - All inspected, created, or modified files MUST be located strictly inside the active project workspace root ("${workspace}").
-- Do NOT write to ~/.codex, temporary paths, or directories outside "${workspace}".
-- Write code and test files directly inside the project directory.
+- Do NOT write to ~/.codex, scratch directories, or temporary paths outside the workspace.
+- Write code and markdown files directly into the project directory.
 
 Mode: ${input.mode}
-${policy}${rules}
+${role}${rules}
 
 Task:
 ${input.prompt}
 
-Return a concise result with findings, validation, and changed files if any.`
+Return a concise, structured summary of your findings and actions inside "${workspace}".`
 }
 
 function cleanEnvironment(): NodeJS.ProcessEnv {
-  const environment = { ...process.env }
-  delete environment.PI_DASHBOARD_AUTH_TOKEN
-  delete environment.OPENROUTER_API_KEY
-  delete environment.PI_DASHBOARD_WORKER_INTERNAL_TOKEN
-  return environment
+  const env: NodeJS.ProcessEnv = { ...process.env }
+  for (const key of Object.keys(env)) {
+    if (/token|secret|password|key/i.test(key) && !/api_key/i.test(key)) {
+      delete env[key]
+    }
+  }
+  return env
 }
 
 export interface CodexWorkerOptions {
@@ -73,9 +75,10 @@ export class CodexWorkerAdapter implements WorkerAdapter {
   constructor(private readonly options: CodexWorkerOptions) {}
 
   get provider(): WorkerProviderStatus {
+    const hasExecutable = Boolean(findExecutable('codex'))
     const codexHome = this.options.codexHome ?? join(homedir(), '.codex')
     const authenticated = existsSync(join(codexHome, 'auth.json')) || existsSync(codexHome)
-    const ready = this.options.enabled && authenticated
+    const ready = this.options.enabled && hasExecutable && authenticated
 
     return {
       id: 'codex-cli',
@@ -83,7 +86,13 @@ export class CodexWorkerAdapter implements WorkerAdapter {
       description: 'OpenAI Codex running non-interactively in the project workspace.',
       kind: 'external',
       status: ready ? 'ready' : this.options.enabled ? 'unavailable' : 'disabled',
-      statusLabel: ready ? 'Installed and signed in' : this.options.enabled ? 'Installed; select Connect to sign in' : 'Disabled by configuration',
+      statusLabel: !this.options.enabled
+        ? 'Disabled by configuration'
+        : !hasExecutable
+          ? 'Desktop CLI not detected on server'
+          : ready
+            ? 'Installed and signed in'
+            : 'Installed; select Connect to sign in',
       modes: ['research', 'review', 'implement'] as WorkerMode[],
       enabled: this.options.enabled,
       loginCommand: 'exec codex login --device-auth',

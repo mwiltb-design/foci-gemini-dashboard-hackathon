@@ -1,7 +1,7 @@
-﻿import { homedir } from 'node:os'
+import { homedir } from 'node:os'
 import type { WebSocket } from 'ws'
 import pty from '@homebridge/node-pty-prebuilt-multiarch'
-import { resolveExecutable } from './process-control.js'
+import { findExecutable, resolveExecutable } from './process-control.js'
 
 export class WorkerConsoleSession {
   private ptyProcess: any = null
@@ -27,21 +27,41 @@ export class WorkerConsoleSession {
     delete env.OPENROUTER_API_KEY
     delete env.PI_DASHBOARD_WORKER_INTERNAL_TOKEN
 
-    let command: string
+    let rawBinary = 'pi'
     let args: string[] = []
 
     if (providerId === 'antigravity-cli') {
-      command = resolveExecutable('agy')
+      rawBinary = 'agy'
       args = []
     } else if (providerId === 'codex-cli') {
-      command = resolveExecutable('codex')
+      rawBinary = 'codex'
       args = mode === 'login' ? ['login', '--device-auth'] : []
     } else if (providerId === 'claude-cli') {
-      command = resolveExecutable('claude')
+      rawBinary = 'claude'
       args = mode === 'login' ? ['login'] : []
-    } else {
-      command = resolveExecutable('pi')
-      args = []
+    }
+
+    const command = resolveExecutable(rawBinary)
+    const executableFound = Boolean(findExecutable(rawBinary))
+
+    if (!executableFound && rawBinary !== 'pi') {
+      const friendlyName = providerId === 'antigravity-cli' ? 'Antigravity CLI' : providerId === 'codex-cli' ? 'Codex CLI' : 'Claude CLI'
+      const banner = [
+        '\r\n\x1b[36m─────────────────────────────────────────────────────────────────────────────\x1b[0m\r\n',
+        `\x1b[1;33m  ✦  ${friendlyName} (\`${rawBinary}\`) is not installed on this server.\x1b[0m\r\n\r\n`,
+        '  \x1b[32m✔\x1b[0m \x1b[1mIn Google Cloud Run:\x1b[0m Use the built-in \x1b[36mGemini Worker\x1b[0m for autonomous tasks.\r\n',
+        `  \x1b[32m✔\x1b[0m \x1b[1mFor ${friendlyName}:\x1b[0m Run Foci Dashboard on your local computer where the CLI is installed.\r\n`,
+        '\x1b[36m─────────────────────────────────────────────────────────────────────────────\x1b[0m\r\n\r\n',
+      ].join('')
+
+      this.browser = browser
+      setTimeout(() => {
+        if (browser.readyState === 1 /* WebSocket.OPEN */) {
+          browser.send(JSON.stringify({ type: 'output', data: banner }))
+          browser.send(JSON.stringify({ type: 'exit', exitCode: 0 }))
+        }
+      }, 50)
+      return
     }
 
     try {

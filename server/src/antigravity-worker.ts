@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { GitService, GitStatusEntry } from './git-service.js'
-import { processGroupOptions, resolveExecutable, terminateProcess } from './process-control.js'
+import { findExecutable, processGroupOptions, resolveExecutable, terminateProcess } from './process-control.js'
 import type { WorkerAdapter, WorkerChangedFile, WorkerMode, WorkerProviderStatus, WorkerRunHooks, WorkerRunInput, WorkerRunOutput } from './worker-types.js'
 
 function boundedText(value: string, limit: number): { text: string; truncated: boolean } {
@@ -29,26 +29,18 @@ function workerPrompt(input: WorkerRunInput, workspace: string): string {
   const role = input.mode === 'implement'
     ? 'You have permission to inspect and edit files inside the current workspace. Implement the requested changes and verify correctness.'
     : input.mode === 'review'
-      ? 'Review the project read-only. Identify risks, defects, and concrete recommendations.'
-      : 'Research the project read-only and report concise, evidence-based findings.'
+      ? 'Review the requested changes or code in the workspace and provide a structured assessment.'
+      : 'Research the workspace and answer the question with precise evidence.'
+  const rules = input.ruleContext ? `\nGuidelines:\n${input.ruleContext}\n` : ''
 
-  const rules = input.ruleContext ? `\n\nGuidelines:\n${input.ruleContext}\n` : ''
-
-  return `You are a bounded Antigravity CLI worker reporting back to Pi Dashboard.
-
-Active Project Workspace: ${workspace}
-CRITICAL WORKSPACE CONFINEMENT:
-- All inspected, created, or modified files MUST be located strictly inside the active project workspace root ("${workspace}").
-- Do NOT write to ~/.gemini, scratch directories, or temporary paths outside the workspace.
-- Write code and markdown files directly into the project directory.
-
-Mode: ${input.mode}
-${role}${rules}
-
-Task:
-${input.prompt}
-
-Return a concise, structured summary of your findings and actions inside "${workspace}".`
+  return [
+    `Mode: ${input.mode}`,
+    `Workspace: ${workspace}`,
+    role,
+    rules,
+    'Task:',
+    input.prompt,
+  ].join('\n')
 }
 
 function cleanEnvironment(): NodeJS.ProcessEnv {
@@ -73,10 +65,11 @@ export class AntigravityWorkerAdapter implements WorkerAdapter {
   constructor(private readonly options: AntigravityWorkerOptions) {}
 
   get provider(): WorkerProviderStatus {
+    const hasExecutable = Boolean(findExecutable('agy'))
     const defaultHome = this.options.antigravityHome ?? join(homedir(), '.gemini')
     const cliHome = join(defaultHome, 'antigravity-cli')
     const authenticated = existsSync(join(cliHome, 'antigravity-oauth-token')) || existsSync(join(defaultHome, 'antigravity-cli'))
-    const ready = this.options.enabled && authenticated
+    const ready = this.options.enabled && hasExecutable && authenticated
 
     return {
       id: 'antigravity-cli',
@@ -84,7 +77,13 @@ export class AntigravityWorkerAdapter implements WorkerAdapter {
       description: 'Google Antigravity running with full research, review, and implement capabilities.',
       kind: 'external',
       status: ready ? 'ready' : this.options.enabled ? 'unavailable' : 'disabled',
-      statusLabel: ready ? 'Installed and ready' : this.options.enabled ? 'Installed; select Connect to sign in' : 'Disabled by configuration',
+      statusLabel: !this.options.enabled
+        ? 'Disabled by configuration'
+        : !hasExecutable
+          ? 'Desktop CLI not detected on server'
+          : ready
+            ? 'Installed and ready'
+            : 'Installed; select Connect to sign in',
       modes: ['research', 'review', 'implement'] as WorkerMode[],
       enabled: this.options.enabled,
       loginCommand: 'exec agy',

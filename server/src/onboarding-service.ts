@@ -22,15 +22,16 @@ export class OnboardingError extends Error {
 }
 
 function normalizedState(value: unknown): Omit<OnboardingState, 'userProfileEditable'> {
+  const isCloud = process.env.NODE_ENV === 'production' || (process.env.FOCI_AGENT_PROVIDER ?? '').toLowerCase() === 'gemini'
   const raw = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
   return {
     schemaVersion: 1,
-    completed: raw.completed === true,
+    completed: typeof raw.completed === 'boolean' ? raw.completed : isCloud,
     dismissed: raw.dismissed === true,
-    appName: typeof raw.appName === 'string' ? raw.appName : 'Pi-Dashboard',
+    appName: typeof raw.appName === 'string' ? raw.appName : 'Foci Dashboard',
     features: {
-      terminal: (raw.features as any)?.terminal === true,
-      workers: (raw.features as any)?.workers === true,
+      terminal: typeof (raw.features as any)?.terminal === 'boolean' ? (raw.features as any).terminal : isCloud,
+      workers: typeof (raw.features as any)?.workers === 'boolean' ? (raw.features as any).workers : isCloud,
     },
     ...(typeof raw.updatedAt === 'string' ? { updatedAt: raw.updatedAt } : {}),
   }

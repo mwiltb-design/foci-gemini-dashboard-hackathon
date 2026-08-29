@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { GitService, GitStatusEntry } from './git-service.js'
-import { processGroupOptions, resolveExecutable, terminateProcess } from './process-control.js'
+import { findExecutable, processGroupOptions, resolveExecutable, terminateProcess } from './process-control.js'
 import type { WorkerAdapter, WorkerChangedFile, WorkerMode, WorkerProviderStatus, WorkerRunHooks, WorkerRunInput, WorkerRunOutput } from './worker-types.js'
 
 function boundedText(value: string, limit: number): { text: string; truncated: boolean } {
@@ -26,29 +26,29 @@ function changedFiles(before: GitStatusEntry[], after: GitStatusEntry[]): Worker
 }
 
 function claudePrompt(input: WorkerRunInput, workspace: string): string {
-  const role = input.mode === 'implement'
-    ? 'You may inspect and edit files inside the current workspace. Implement the requested changes and verify correctness.'
+  const policy = input.mode === 'implement'
+    ? 'You may edit files inside the current project workspace and run focused validation. Do not commit, push, access credentials, or change external systems.'
     : input.mode === 'review'
-      ? 'Review the project read-only. Provide detailed critique, risk assessment, and recommendations.'
-      : 'Research the project read-only and report structured, evidence-based findings.'
+      ? 'Review only. Do not edit files or run commands that change project or external state.'
+      : 'Research this project only. Stay read-only and do not change project or external state.'
 
   const rules = input.ruleContext ? `\n\nGuidelines:\n${input.ruleContext}\n` : ''
 
-  return `You are a bounded Claude CLI worker reporting back to Pi Dashboard.
+  return `You are a bounded Claude worker reporting back to Pi Dashboard.
 
 Active Project Workspace: ${workspace}
 CRITICAL WORKSPACE CONFINEMENT:
 - All inspected, created, or modified files MUST be located strictly inside the active project workspace root ("${workspace}").
-- Do NOT write to ~/.claude, temporary paths, or directories outside the workspace.
-- Write code, documentation, and edits directly inside the project directory.
+- Do NOT write to ~/.claude, temporary paths, or directories outside "${workspace}".
+- Write code and test files directly inside the project directory.
 
 Mode: ${input.mode}
-${role}${rules}
+${policy}${rules}
 
 Task:
 ${input.prompt}
 
-Return a concise, structured summary of your findings and actions inside "${workspace}".`
+Return a concise result with findings, validation, and changed files if any.`
 }
 
 function cleanEnvironment(): NodeJS.ProcessEnv {
@@ -72,9 +72,10 @@ export class ClaudeWorkerAdapter implements WorkerAdapter {
   constructor(private readonly options: ClaudeWorkerOptions) {}
 
   get provider(): WorkerProviderStatus {
+    const hasExecutable = Boolean(findExecutable('claude'))
     const claudeHome = this.options.claudeHome ?? join(homedir(), '.claude')
     const authenticated = existsSync(join(claudeHome, 'auth.json')) || existsSync(join(claudeHome, 'session.json'))
-    const ready = this.options.enabled && authenticated
+    const ready = this.options.enabled && hasExecutable && authenticated
 
     return {
       id: 'claude-cli',
@@ -82,7 +83,13 @@ export class ClaudeWorkerAdapter implements WorkerAdapter {
       description: 'Anthropic Claude running headlessly in the project workspace.',
       kind: 'external',
       status: ready ? 'ready' : this.options.enabled ? 'unavailable' : 'disabled',
-      statusLabel: ready ? 'Installed and ready' : this.options.enabled ? 'Installed; select Connect to sign in' : 'Disabled by configuration',
+      statusLabel: !this.options.enabled
+        ? 'Disabled by configuration'
+        : !hasExecutable
+          ? 'Desktop CLI not detected on server'
+          : ready
+            ? 'Installed and ready'
+            : 'Installed; select Connect to sign in',
       modes: ['research', 'review', 'implement'] as WorkerMode[],
       enabled: this.options.enabled,
       loginCommand: 'exec claude login',

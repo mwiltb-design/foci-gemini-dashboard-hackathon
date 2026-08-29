@@ -84,13 +84,27 @@ let sessionRoot = process.env.PI_SESSION_ROOT ?? rpcSessionDir
 let activityPath = process.env.PI_DASHBOARD_ACTIVITY_PATH ?? resolve(projectDataDir, 'activity.jsonl')
 let sessionArchivePath = process.env.PI_DASHBOARD_SESSION_ARCHIVE_PATH ?? resolve(projectDataDir, 'sessions-archive.json')
 let runtimeInfoPath = process.env.PI_DASHBOARD_RUNTIME_INFO_PATH ?? resolve(projectDataDir, 'runtime-tools.json')
-const runtimeInfoExtension = process.env.PI_DASHBOARD_RUNTIME_INFO_EXTENSION ?? resolve(process.cwd(), 'extensions/dashboard-runtime-info.ts')
-const curatedMemoryExtension = process.env.PI_DASHBOARD_CURATED_MEMORY_EXTENSION ?? resolve(process.cwd(), 'extensions/curated-memory.ts')
-const memoryCheckpointExtension = process.env.PI_DASHBOARD_MEMORY_CHECKPOINT_EXTENSION ?? resolve(process.cwd(), 'extensions/memory-checkpoint.ts')
-const pluginToolsExtension = process.env.PI_DASHBOARD_PLUGIN_TOOLS_EXTENSION ?? resolve(process.cwd(), 'extensions/dashboard-plugin-tools.ts')
-const workersExtension = process.env.PI_DASHBOARD_WORKERS_EXTENSION ?? resolve(process.cwd(), 'extensions/dashboard-workers.ts')
-const dashboardPluginAuthoringSkill = process.env.PI_DASHBOARD_PLUGIN_AUTHORING_SKILL_PATH ?? resolve(process.cwd(), 'skills/dashboard-plugin-authoring')
-const dashboardReferenceSkill = process.env.PI_DASHBOARD_REFERENCE_SKILL_PATH ?? resolve(process.cwd(), 'skills/dashboard-reference')
+const extensionsDir = [
+  resolve(moduleDir, '../extensions'),
+  resolve(moduleDir, '../../server/extensions'),
+  resolve(process.cwd(), 'server/extensions'),
+  resolve(process.cwd(), 'extensions'),
+].find((candidate) => existsSync(candidate)) ?? resolve(process.cwd(), 'server/extensions')
+
+const skillsDir = [
+  resolve(moduleDir, '../skills'),
+  resolve(moduleDir, '../../server/skills'),
+  resolve(process.cwd(), 'server/skills'),
+  resolve(process.cwd(), 'skills'),
+].find((candidate) => existsSync(candidate)) ?? resolve(process.cwd(), 'server/skills')
+
+const runtimeInfoExtension = process.env.PI_DASHBOARD_RUNTIME_INFO_EXTENSION ?? resolve(extensionsDir, 'dashboard-runtime-info.ts')
+const curatedMemoryExtension = process.env.PI_DASHBOARD_CURATED_MEMORY_EXTENSION ?? resolve(extensionsDir, 'curated-memory.ts')
+const memoryCheckpointExtension = process.env.PI_DASHBOARD_MEMORY_CHECKPOINT_EXTENSION ?? resolve(extensionsDir, 'memory-checkpoint.ts')
+const pluginToolsExtension = process.env.PI_DASHBOARD_PLUGIN_TOOLS_EXTENSION ?? resolve(extensionsDir, 'dashboard-plugin-tools.ts')
+const workersExtension = process.env.PI_DASHBOARD_WORKERS_EXTENSION ?? resolve(extensionsDir, 'dashboard-workers.ts')
+const dashboardPluginAuthoringSkill = process.env.PI_DASHBOARD_PLUGIN_AUTHORING_SKILL_PATH ?? resolve(skillsDir, 'dashboard-plugin-authoring')
+const dashboardReferenceSkill = process.env.PI_DASHBOARD_REFERENCE_SKILL_PATH ?? resolve(skillsDir, 'dashboard-reference')
 const antigravityHome = process.env.PI_DASHBOARD_ANTIGRAVITY_HOME ?? process.env.ANTIGRAVITY_HOME
 const repoPluginDir = resolve(import.meta.dirname ?? process.cwd(), '../../plugins')
 const pluginCodeRoot = process.env.PI_DASHBOARD_PLUGIN_CODE_ROOT ?? (existsSync(repoPluginDir) ? repoPluginDir : resolve(process.cwd(), 'plugins'))

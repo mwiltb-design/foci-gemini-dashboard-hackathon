@@ -20,7 +20,7 @@ export function terminateProcess(child: ChildProcess, signal: NodeJS.Signals): v
   child.kill(signal)
 }
 
-export function resolveExecutable(name: string): string {
+export function findExecutable(name: string): string | null {
   if (process.platform === 'win32') {
     const home = homedir()
     const candidates = [
@@ -38,12 +38,16 @@ export function resolveExecutable(name: string): string {
       const found = execSync(`where.exe ${name}`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString('utf8').split(/\r?\n/)[0]?.trim()
       if (found && existsSync(found)) return found
     } catch {}
-    return name
+    return null
   } else {
     try {
       const found = execSync(`which ${name}`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString('utf8').split(/\r?\n/)[0]?.trim()
       if (found && existsSync(found)) return found
     } catch {}
-    return name
+    return null
   }
+}
+
+export function resolveExecutable(name: string): string {
+  return findExecutable(name) ?? name
 }
