@@ -86,6 +86,8 @@ export interface WorkerSnapshot {
   archivePath: string
   configuration: WorkerConfiguration
   rules: WorkerRuleFile[]
+  isFiltered?: boolean
+  profileLabel?: string
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {

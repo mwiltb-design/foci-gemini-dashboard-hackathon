@@ -12,6 +12,26 @@ interface GeminiAgentOptions {
 }
 
 const workerProviderIds = ['gemini-worker', 'sub-pi', 'antigravity-cli', 'codex-cli', 'claude-cli'] as const
+const DEFAULT_GEMINI_MODEL = 'gemini-3.7-flash'
+const GEMINI_MODEL_IDS = [
+  DEFAULT_GEMINI_MODEL,
+  'gemini-3.7-pro',
+  'gemini-3.7-flash-lite',
+  'gemini-3.5-flash',
+  'gemini-3.5-pro',
+  'gemini-3.5-flash-lite',
+  'gemini-3.0-flash',
+  'gemini-3.0-pro',
+  'gemini-2.5-pro',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-2.0-pro',
+  'gemini-1.5-pro',
+  'gemini-1.5-flash',
+  'gemini-1.5-flash-8b',
+] as const
 const workerModes = ['research', 'review', 'implement'] as const
 
 export interface GeminiWorkerDelegateInput {
@@ -113,7 +133,7 @@ export class GeminiAgentProcess extends EventEmitter {
 
   constructor(private readonly options: GeminiAgentOptions) {
     super()
-    this.model = process.env.GEMINI_MODEL ?? process.env.GEMINI_FLASH_MODEL ?? 'gemini-3.5-flash'
+    this.model = process.env.GEMINI_MODEL ?? process.env.GEMINI_FLASH_MODEL ?? DEFAULT_GEMINI_MODEL
   }
 
   get running(): boolean {
@@ -203,7 +223,7 @@ export class GeminiAgentProcess extends EventEmitter {
   }
 
   private availableModels(): Array<Record<string, unknown>> {
-    const models = [this.model, 'gemini-3.5-flash', 'gemini-3.5-pro', 'gemini-2.5-flash', 'gemini-2.5-pro']
+    const models = [this.model, ...GEMINI_MODEL_IDS]
     return [...new Set(models)].map((id) => ({
       id,
       provider: 'google',

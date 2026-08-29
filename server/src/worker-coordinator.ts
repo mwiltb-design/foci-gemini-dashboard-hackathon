@@ -1,4 +1,4 @@
-﻿import { EventEmitter } from 'node:events'
+import { EventEmitter } from 'node:events'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -20,6 +20,32 @@ export class WorkerError extends Error {
   }
 }
 
+export function resolveEnabledWorkerProviders(): { allowedIds: string[] | undefined; isCloudMode: boolean } {
+  const envFilter = process.env.FOCI_ENABLED_WORKERS?.trim()
+  if (envFilter) {
+    if (envFilter === '*' || envFilter.toLowerCase() === 'all') {
+      return { allowedIds: undefined, isCloudMode: false }
+    }
+
+    const list = envFilter.split(',').map((id) => id.trim()).filter(Boolean)
+    if (list.length > 0) {
+      return { allowedIds: list, isCloudMode: true }
+    }
+  }
+
+  const isCloudRun = Boolean(process.env.K_SERVICE)
+  const isGeminiProvider = (process.env.FOCI_AGENT_PROVIDER ?? process.env.PI_DASHBOARD_AGENT_PROVIDER ?? '').toLowerCase() === 'gemini'
+
+  if (isCloudRun || isGeminiProvider) {
+    return {
+      allowedIds: ['gemini-worker', 'antigravity-cli'],
+      isCloudMode: true,
+    }
+  }
+
+  return { allowedIds: undefined, isCloudMode: false }
+}
+
 export interface WorkerCoordinatorOptions {
   storePath: string
   archivePath: string
@@ -27,6 +53,7 @@ export interface WorkerCoordinatorOptions {
   rulesService: WorkerRulesService
   bounds: WorkerBounds
   defaultProviderId?: string
+  allowedProviderIds?: string[]
   primaryDefaults: () => Promise<{ model?: { provider: string; id: string }; thinkingLevel?: string }>
 }
 
@@ -40,6 +67,14 @@ export class WorkerCoordinator extends EventEmitter {
 
   constructor(private readonly options: WorkerCoordinatorOptions) {
     super()
+  }
+
+  get allowedProviderIds(): string[] | undefined {
+    return this.options.allowedProviderIds
+  }
+
+  get isFiltered(): boolean {
+    return Boolean(this.allowedProviderIds && this.allowedProviderIds.length < this.options.adapters.length)
   }
 
   async initialize(): Promise<void> {
@@ -79,6 +114,9 @@ export class WorkerCoordinator extends EventEmitter {
   }
 
   getAdapter(providerId: string): WorkerAdapter | undefined {
+    if (this.allowedProviderIds && !this.allowedProviderIds.includes(providerId)) {
+      return undefined
+    }
     return this.options.adapters.find((candidate) => candidate.provider.id === providerId)
   }
 
@@ -98,11 +136,17 @@ export class WorkerCoordinator extends EventEmitter {
     archivePath: string
     configuration: WorkerConfiguration
     rules: WorkerRuleFile[]
+    isFiltered?: boolean
+    profileLabel?: string
   }> {
     const config = await this.options.rulesService.loadConfig()
     const rules = await this.options.rulesService.listRules()
 
-    const providers: WorkerProviderStatus[] = this.options.adapters.map((adapter) => {
+    const visibleAdapters = this.allowedProviderIds
+      ? this.options.adapters.filter((adapter) => this.allowedProviderIds!.includes(adapter.provider.id))
+      : this.options.adapters
+
+    const providers: WorkerProviderStatus[] = visibleAdapters.map((adapter) => {
       const p = adapter.provider
       const isEnabled = config.providersEnabled[p.id] !== false
       return {
@@ -121,6 +165,7 @@ export class WorkerCoordinator extends EventEmitter {
       archivePath: this.options.archivePath,
       configuration: config,
       rules,
+      ...(this.isFiltered ? { isFiltered: true, profileLabel: 'Gemini / Antigravity Cloud Profile' } : {}),
     }
   }
 
@@ -234,7 +279,8 @@ export class WorkerCoordinator extends EventEmitter {
   }): Promise<WorkerTask> {
     if (this.activeTaskId) throw new WorkerError('A worker is already executing another task', 409)
 
-    const providerId = input.providerId || this.options.defaultProviderId || 'sub-pi'
+    const defaultProvider = this.options.defaultProviderId || (this.allowedProviderIds?.[0] ?? 'sub-pi')
+    const providerId = input.providerId || defaultProvider
     const adapter = this.getAdapter(providerId)
     if (!adapter) throw new WorkerError(`Worker provider '${providerId}' is not available`, 404)
 

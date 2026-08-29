@@ -145,14 +145,15 @@ export function WorkersBrowser({ onOpenSession }: { onOpenSession: (sessionId: s
 
   async function submit(event: FormEvent) {
     event.preventDefault()
+    const targetProviderId = currentProvider?.id ?? selectedProviderId
     let modelPayload: { provider: string; id: string } | undefined
-    if (selectedModelKey !== 'default' && selectedProviderId === 'sub-pi') {
+    if (selectedModelKey !== 'default' && targetProviderId === 'sub-pi') {
       const parsed = splitModel(selectedModelKey)
       if (parsed.provider && parsed.model) {
         modelPayload = { provider: parsed.provider, id: parsed.model }
       }
     }
-    const thinkingPayload = selectedThinking !== 'default' && selectedProviderId === 'sub-pi' ? selectedThinking : undefined
+    const thinkingPayload = selectedThinking !== 'default' && targetProviderId === 'sub-pi' ? selectedThinking : undefined
 
     const boundsPayload = {
       turnLimit,
@@ -161,7 +162,7 @@ export function WorkersBrowser({ onOpenSession }: { onOpenSession: (sessionId: s
     }
 
     const ok = await workers.start({
-      providerId: selectedProviderId,
+      providerId: targetProviderId,
       mode,
       prompt,
       bounds: boundsPayload,
@@ -227,14 +228,20 @@ export function WorkersBrowser({ onOpenSession }: { onOpenSession: (sessionId: s
         <section className="workers-providers" aria-label="Worker providers">
           <header>
             <div>
-              <span className="eyebrow">Provider readiness</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span className="eyebrow">Provider readiness</span>
+                {workers.snapshot?.isFiltered && (
+                  <span style={{ fontSize: '10px', color: 'var(--accent, #63e6be)', background: 'rgba(99, 230, 190, 0.1)', padding: '1px 6px', borderRadius: '4px', border: '1px solid rgba(99, 230, 190, 0.25)' }}>
+                    ☁ {workers.snapshot.profileLabel ?? 'Cloud Profile'}
+                  </span>
+                )}
+              </div>
               <h2>Available Workers & CLIs</h2>
             </div>
           </header>
           <div className="worker-provider-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
             {providers.map((provider) => {
-              const isSubPi = provider.id === 'sub-pi'
-              const mark = isSubPi ? '✦' : provider.id === 'antigravity-cli' ? '⚡' : provider.id === 'codex-cli' ? '⌥' : '✦'
+              const mark = provider.id === 'antigravity-cli' ? '⚡' : provider.id === 'gemini-worker' || provider.id === 'sub-pi' ? '✦' : '⌥'
 
               return (
                 <article className={`worker-provider worker-provider--${provider.status}`} key={provider.id} style={{ position: 'relative' }}>
@@ -319,11 +326,13 @@ export function WorkersBrowser({ onOpenSession }: { onOpenSession: (sessionId: s
                   <span className="eyebrow">New task</span>
                   <h2>Delegate to {currentProvider?.name ?? 'Worker'}</h2>
                   <p>
-                    {currentProvider?.id === 'sub-pi'
-                      ? 'Gemini worker executes in a separate Foci session. Primary agent receives only the bounded result.'
-                      : currentProvider?.id === 'antigravity-cli'
-                        ? 'Antigravity CLI executes with full reasoning and workspace permissions (research, review, implement).'
-                        : `${currentProvider?.name} runs bounded in the workspace and returns structured findings.`}
+                    {currentProvider?.id === 'gemini-worker'
+                      ? 'Cloud-native Gemini worker executes bounded tasks in the workspace and creates structured artifacts.'
+                      : currentProvider?.id === 'sub-pi'
+                        ? 'Sub PI executes in a separate Foci session. Primary agent receives only the bounded result.'
+                        : currentProvider?.id === 'antigravity-cli'
+                          ? 'Antigravity CLI executes with full reasoning and workspace permissions (research, review, implement).'
+                          : `${currentProvider?.name} runs bounded in the workspace and returns structured findings.`}
                   </p>
                 </div>
               </header>
@@ -349,7 +358,7 @@ export function WorkersBrowser({ onOpenSession }: { onOpenSession: (sessionId: s
                         fontWeight: selectedProviderId === p.id ? 'bold' : 'normal',
                       }}
                     >
-                      {p.id === 'sub-pi' ? '✦ ' : p.id === 'antigravity-cli' ? '⚡ ' : '⌥ '}{p.name}
+                      {p.id === 'antigravity-cli' ? '⚡ ' : p.id === 'gemini-worker' || p.id === 'sub-pi' ? '✦ ' : '⌥ '}{p.name}
                     </button>
                   ))}
                 </div>

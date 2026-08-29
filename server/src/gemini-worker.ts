@@ -3,6 +3,8 @@ import { dirname, relative, resolve } from 'node:path'
 import { GoogleGenAI } from '@google/genai'
 import type { WorkerAdapter, WorkerProviderStatus, WorkerRunHooks, WorkerRunInput, WorkerRunOutput } from './worker-types.js'
 
+const DEFAULT_GEMINI_MODEL = 'gemini-3.7-flash'
+
 interface GeminiWorkerOptions {
   workspace: string
   enabled: boolean
@@ -19,7 +21,7 @@ export class GeminiWorkerAdapter implements WorkerAdapter {
 
   constructor(private readonly options: GeminiWorkerOptions) {
     const hasKey = Boolean(process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY)
-    this.model = process.env.GEMINI_WORKER_MODEL ?? process.env.GEMINI_MODEL ?? 'gemini-3.5-flash'
+    this.model = process.env.GEMINI_WORKER_MODEL ?? process.env.GEMINI_MODEL ?? DEFAULT_GEMINI_MODEL
     this.provider = {
       id: 'gemini-worker',
       name: 'Gemini Worker',

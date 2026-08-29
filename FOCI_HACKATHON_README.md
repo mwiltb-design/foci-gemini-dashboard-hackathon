@@ -46,7 +46,7 @@ Never commit `.env`. It is ignored by Git and excluded from the Docker build con
 ```bash
 docker run --rm -p 8080:8080 \
   -e GEMINI_API_KEY=YOUR_KEY \
-  -e GEMINI_MODEL=gemini-3.5-flash \
+  -e GEMINI_MODEL=gemini-3.7-flash \
   foci-dashboard:test
 ```
 
@@ -77,10 +77,10 @@ gcloud run deploy foci-dashboard \
   --cpu 1 \
   --timeout 3600 \
   --port 8080 \
-  --set-env-vars FOCI_AGENT_PROVIDER=gemini,GEMINI_MODEL=gemini-3.5-flash,GEMINI_WORKER_MODEL=gemini-3.5-flash,NODE_ENV=production \
+  --set-env-vars FOCI_AGENT_PROVIDER=gemini,GEMINI_MODEL=gemini-3.7-flash,GEMINI_WORKER_MODEL=gemini-3.7-flash,NODE_ENV=production \
   --set-secrets GEMINI_API_KEY=GEMINI_API_KEY:latest
 ```
 
 For Google-authenticated access, remove `--allow-unauthenticated`. For simple dashboard password protection on a public demo URL, store `PI_DASHBOARD_AUTH_TOKEN` as a separate Secret Manager secret and add it to `--set-secrets` rather than placing it in `.env` or `--set-env-vars`; the static login UI and health probes remain reachable before token login.
 
-If the hackathon publishes a different exact Gemini 3.5 model ID, update `GEMINI_MODEL` and `GEMINI_WORKER_MODEL`.
+If the hackathon publishes a different exact Gemini model ID, update `GEMINI_MODEL` and `GEMINI_WORKER_MODEL`.

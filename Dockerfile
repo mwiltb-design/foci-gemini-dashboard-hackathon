@@ -26,11 +26,11 @@ ENV PI_DASHBOARD_WORKSPACE=/workspace
 ENV FOCI_STATIC_UI_DIR=/app/ui/dist
 ENV PATH="/usr/local/bin:/home/node/.local/bin:${PATH}"
 
-# Install CLI tools: Antigravity CLI (agy), OpenAI Codex CLI (codex), Claude Code (claude), Pi Coding Agent (pi)
-RUN (curl -fsSL https://antigravity.google/cli/install.sh | bash || true) && \
-    (cp /root/.local/bin/agy /usr/local/bin/agy 2>/dev/null || true) && \
-    npm install -g @openai/codex @anthropic-ai/claude-code @earendil-works/pi-coding-agent && \
-    chmod -R 755 /usr/local/bin /usr/local/lib/node_modules 2>/dev/null || true
+# Install Antigravity CLI (agy) only as external CLI worker
+RUN curl -fsSL https://antigravity.google/cli/install.sh | bash && \
+    if [ -x /root/.local/bin/agy ]; then cp /root/.local/bin/agy /usr/local/bin/agy; elif command -v agy >/dev/null 2>&1; then cp "$(command -v agy)" /usr/local/bin/agy; fi && \
+    test -x /usr/local/bin/agy && /usr/local/bin/agy --version && \
+    (chmod -R 755 /usr/local/bin 2>/dev/null || true)
 
 COPY --from=deps /app/package*.json ./
 COPY --from=deps /app/server/package*.json ./server/
@@ -46,7 +46,7 @@ COPY server/templates ./server/templates
 COPY server/package*.json ./server/dist/server/
 COPY server/templates ./server/dist/server/templates
 
-RUN mkdir -p /workspace /home/node/.gemini /home/node/.codex /home/node/.claude /home/node/.pi /home/node/.pi-dashboard/onboarding && \
+RUN mkdir -p /workspace /home/node/.gemini /home/node/.pi-dashboard/onboarding && \
     echo '{"schemaVersion":1,"completed":true,"dismissed":false,"appName":"Foci Dashboard","features":{"terminal":true,"workers":true}}' > /home/node/.pi-dashboard/onboarding/state.json && \
     chown -R node:node /workspace /home/node
 USER node

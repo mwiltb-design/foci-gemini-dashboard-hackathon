@@ -36,7 +36,7 @@ import { ClaudeWorkerAdapter } from './claude-worker.js'
 import { GeminiWorkerAdapter } from './gemini-worker.js'
 import { WorkerRulesService } from './worker-rules.js'
 import { WorkerConsoleSession } from './worker-console-session.js'
-import { WorkerCoordinator, WorkerError } from './worker-coordinator.js'
+import { WorkerCoordinator, WorkerError, resolveEnabledWorkerProviders } from './worker-coordinator.js'
 import { ProjectService } from './project-service.js'
 import { ShortcutService } from './shortcut-service.js'
 import { RemoteAccessService } from './remote-access-service.js'
@@ -137,7 +137,10 @@ const profile = dashboardProfile()
 const enabledFeatures = new Set<DashboardFeature>(profile.features)
 let rpcArgs = ['--mode', 'rpc', '--continue', '--name', 'Pi Dashboard', '--extension', runtimeInfoExtension, '--extension', curatedMemoryExtension, '--extension', memoryCheckpointExtension, '--extension', pluginToolsExtension, ...(enabledFeatures.has('workers') ? ['--extension', workersExtension] : []), ...(rpcSessionDir ? ['--session-dir', rpcSessionDir] : [])]
 const useGeminiAgent = (process.env.FOCI_AGENT_PROVIDER ?? process.env.PI_DASHBOARD_AGENT_PROVIDER ?? '').toLowerCase() === 'gemini'
-const defaultWorkerProviderId = useGeminiAgent ? 'gemini-worker' : 'sub-pi'
+const { allowedIds: enabledWorkerIds } = resolveEnabledWorkerProviders()
+const defaultWorkerProviderId = (enabledWorkerIds && !enabledWorkerIds.includes('sub-pi'))
+  ? (enabledWorkerIds[0] ?? 'gemini-worker')
+  : (useGeminiAgent ? 'gemini-worker' : 'sub-pi')
 let rpc = registerRpcListeners(useGeminiAgent
   ? new GeminiAgentProcess({ cwd: workspace, sessionDir: rpcSessionDir, workerDelegate: delegateWorker })
   : new PiRpcProcess({
@@ -208,6 +211,7 @@ let workers = new WorkerCoordinator({
   rulesService: workerRules,
   bounds: workerBounds,
   defaultProviderId: defaultWorkerProviderId,
+  allowedProviderIds: enabledWorkerIds,
   primaryDefaults: async () => {
     const snapshot = await state()
     const model = snapshot.model && typeof snapshot.model === 'object' ? snapshot.model as Record<string, unknown> : undefined
@@ -407,6 +411,8 @@ async function switchActiveWorkspace(targetWorkspace: string): Promise<{ workspa
     adapters: [geminiWorker, subPi, antigravityWorker, codexWorker, claudeWorker],
     rulesService: workerRules,
     bounds: workerBounds,
+    defaultProviderId: defaultWorkerProviderId,
+    allowedProviderIds: enabledWorkerIds,
     primaryDefaults: async () => {
       const snapshot = await state()
       const model = snapshot.model && typeof snapshot.model === 'object' ? snapshot.model as Record<string, unknown> : undefined
