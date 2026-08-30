@@ -1,119 +1,177 @@
-<div align="center">
+﻿<div align="center">
 
-# 🚀 Pi Dashboard
-### Next-Generation Native Desktop Agent Workspace & Multi-Provider Coordinator
+# 🚀 Foci Dashboard
+### Autonomous Multi-Agent Collaborative Workspace & Scientific Discovery Studio
+**Google AI Hackathon — Track 2: The Collaborative Partner**
 
-[![Website](https://img.shields.io/badge/Website-focidashboard.dev-157d78.svg)](https://focidashboard.dev/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](./LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-2ea44f)]()
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178c6)]()
-[![Electron](https://img.shields.io/badge/Electron-Desktop-47848f)]()
-[![React](https://img.shields.io/badge/React-18-61dafb)]()
+[![Google Gemini](https://img.shields.io/badge/Google_Gemini-3.7_Flash_%7C_2.5_Pro-4285F4?logo=google)](https://ai.google.dev/)
+[![Google Cloud Run](https://img.shields.io/badge/Google_Cloud_Run-Serverless_Container-34A853?logo=googlecloud)](https://cloud.google.com/run)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178c6?logo=typescript)](https://www.typescriptlang.org/)
+[![Python](https://img.shields.io/badge/Python-3.11_%7C_GDAL_%7C_Rasterio-3776AB?logo=python)](https://python.org/)
+[![React](https://img.shields.io/badge/React-18-61dafb?logo=react)](https://react.dev/)
 
 <p align="center">
-  <b>A powerful, privacy-first desktop environment orchestrating the Pi Coding Agent alongside Google Antigravity, OpenAI Codex, and Anthropic Claude.</b><br/>
-  🌐 <a href="https://focidashboard.dev/"><b>focidashboard.dev</b></a> — Official website, documentation, and user guides.
+  <b>A unified, cloud-native developer and research workspace where human intent, Lead Gemini, and autonomous worker agents collaborate seamlessly through live sessions, contextual rules, and tool execution.</b>
 </p>
-
-<img src="./docs/assets/preview.png" alt="Pi Dashboard Preview" width="100%" />
 
 </div>
 
 ---
 
-## ✨ Key Features
+## ✨ Key Capabilities
 
-### 🤖 Autonomous Multi-Provider Worker Suite
-* **Native CLI Adapters**: Direct execution integration with **Sub-PI**, **Google Antigravity CLI** (`agy`), **OpenAI Codex CLI** (`codex`), and **Anthropic Claude CLI** (`claude`).
-* **Dynamic Bounds**: Custom sliders for turn limits (1–32), timeouts (1–60m), and result payload limits.
-* **Embedded CLI Console**: Built-in terminal session for running account authentication (`codex login`, `claude login`, `agy`) and tool discovery.
+### 🤖 Multi-Agent Division of Labor (`Track 2`)
+* **Lead Gemini Orchestrator (`gemini-3.7-flash` / `gemini-2.5-pro`):** Directs the research strategy, interprets high-level human directives, prevents hallucinations, and synthesizes findings into concrete deliverables.
+* **Autonomous Task Delegation (`delegate_worker`):** The lead agent delegates specialized sub-tasks (`research`, `review`, `implement`) to background workers:
+  * **`gemini-worker`:** Fast, cloud-native execution for repetitive file operations, data ingestion, and batch operations.
+  * **`antigravity-cli`:** Deep scientific investigation, counter-explanation checks, and benchmark validation with Google OAuth subscription support.
 
-### 📜 2-Level Markdown Rules & Router
-* **Level 1 Delegation Router (`WORKERS.md`)**: Defines provider specializations, routing guidelines, and available host tools (`gh`, `rg`, `uv`, `npm`).
-* **Level 2 Provider Rules (`rules/*.md`)**: Tailored operational instructions for each model provider, editable in real-time in the in-app dual-pane editor.
+### 📜 Contextual Rules & Memory Engine (`rules.md` / `MEMORY.md`)
+* **Hierarchical Memory Banks:** Agents automatically discover and load workspace guidelines, project memory banks (`MEMORY.md`), and localized rules (`rules.md`) to maintain persistent context without repetitive prompting.
+* **Smart Session Resumption:** Automatically tracks, serializes, and restores active conversation trajectories across project workspace switches.
 
-### ◫ Live Web & HTML App Previewer
-* **Workspace HTML Discovery**: Automatic dropdown and direct static file serving (`/api/preview/workspace/*`) for testing local `.html` files without running external servers.
-* **Local Dev Server Tunneling**: Instant preview presets for Vite (`:5173`), Next/React (`:3000`), Local (`:8080`), and custom ports with live hot-reloading.
-* **Responsive Viewport Frames**: Test layouts across **🖥 Desktop (Full Width)**, **📱 Tablet (768px with bezel)**, and **📲 Mobile (375px phone frame)**.
+### 🔬 High-Performance Scientific Geospatial Stack
+* **Pre-installed Geospatial Runtime:** Python 3.11, GDAL (`gdal-bin`, `libgdal-dev`), `rasterio`, `scipy`, `numpy`, `shapely`, and `geopandas` built directly into the container.
+* **LiDAR Elevation Processing:** Capable of windowed slicing of massive USGS 3DEP 1m bare-earth DEMs, Difference-of-Gaussians / Local Relief Modeling (LRM), and multi-dataset empirical benchmarking (Wyoming, Morasko, and Kaali crater fields).
 
-### 🎛️ Modular Experience Stacks & Feature Checklists
-* **One-Click Presets**:
-  * **`★ User / Basic`**: Clean and focused. Core chat, file browser, terminal, and Sub-PI solo worker.
-  * **`⚡ Developer`**: Full-stack dev mode. Multi-agent CLIs (Antigravity & Codex), Markdown Rules editor, and App Previewer.
-  * **`🏢 Business`**: Advanced automations, Claude CLI, and scheduled background tasks.
-* **Granular Feature Checklists**: Check or uncheck any individual feature or worker provider in Settings with instant live saving.
-
-### 💬 Intelligent Multi-Model Chat
-* Streaming conversations with Claude, GPT, OpenRouter, Gemini, and local Ollama models.
-* Real-time visual code diffs, interactive branch trees, and session compaction.
-
-### 📁 File Explorer & Syntax-Highlighted Editor
-* Clean file browser with CodeMirror syntax highlighting, line numbers, and live file saving.
-* Preserves git state indicators (modified, added, untracked) for all workspace files.
-
-### ⚡ Native Terminal with PTY Bridge
-* Embedded pseudo-terminal powered by `node-pty`.
-* Direct PowerShell, Command Prompt, or Git Bash execution with full ANSI color support.
-
-### 🔒 Strict Workspace Confinement
-* Enforces that all generated files, edits, and worker artifacts remain confined within your active project workspace.
-
-### 🌐 Private Remote Pairing with Tailscale Serve
-* Control your dashboard securely from your phone, tablet, or remote laptop over your encrypted Tailnet (`https://<machine>.tailnet.ts.net:8443`) with custom password authentication.
+### 🛠️ Integrated Studio & App Previewer
+* **Monaco Code Editor & Integrated Terminal:** Full PTY shell access with real-time command streaming and Git status badges.
+* **Live App & HTML Previewer:** Instant rendering of generated interactive HTML visualizers, terrain relief maps, and evidence cards directly inside the dashboard.
+* **Adaptive Progress Loop:** High 200-turn capacity with progress-reset on tool success, 30-minute command timeouts, and duplicate-action safety brakes.
 
 ---
 
-## 🛠️ Quick Start
-
-### Prerequisites
-* [Node.js](https://nodejs.org/) (v20 or newer)
-* [Git](https://git-scm.com/)
-
-### Installation & Launch
-
-```powershell
-# Clone the repository
-git clone https://github.com/mwiltb-design/pi-dashboard.git
-cd pi-dashboard
-
-# Launch developer desktop environment (auto-installs dependencies)
-.\scripts\dev.ps1
-```
-
-*(On macOS or Linux, run `./scripts/dev.sh`)*
-
----
-
-## 📁 Architecture Overview
+## 🏗️ Architecture
 
 ```
-pi-dashboard/
-├── electron/          # Native Electron shell & window manager
-├── server/            # Backend API, RPC process runner & PTY bridge
-│   ├── docs/          # Built-in documentation (abilities, limits, shortcuts)
-│   ├── skills/        # Built-in agent lookup skills
-│   ├── src/           # Adapters for Sub-PI, Antigravity, Codex, and Claude
-│   └── templates/     # Clean starter project templates (MEMORY.md)
-├── ui/                # React + Vite frontend application
-│   ├── src/components # Previewer, Worker Console, Stack Selector, Editor
-│   └── src/views      # Dashboard view routing
-├── packages/          # Shared plugin-sdk
-└── scripts/           # Platform launch and build scripts
+foci-gemini-dashboard/
+├── Dockerfile                 # Cloud Run container definition with Python/GDAL & C syscall shims
+├── server/                    # Node.js backend API & Multi-Agent Coordinator
+│   ├── src/
+│   │   ├── gemini-agent.ts    # Lead Gemini adaptive agent loop & tool orchestration
+│   │   ├── gemini-worker.ts   # Cloud-native delegated worker adapter
+│   │   ├── antigravity-worker.ts # Antigravity CLI worker adapter with OAuth priority
+│   │   ├── gemini-auth-sync.ts# Bidirectional GCS persistent OAuth token synchronizer
+│   │   ├── fuse-chmod-shim.c  # Compiled Linux C shim for GCS FUSE POSIX compatibility
+│   │   ├── git-service.ts     # FUSE-safe Git status, diff, and branch coordinator
+│   │   └── index.ts           # WebSocket RPC server, project switcher & static UI host
+│   └── test/                  # Automated test suite (sessions, worker routing, persistence)
+├── ui/                        # React + Vite frontend workspace studio
+│   ├── src/components/        # Chat timeline, Monaco editor, App Previewer, Worker console
+│   └── src/hooks/             # usePiChat, useProjects, useWorkers, useTerminal
+└── plugins/                   # Custom agent extension modules and tool packages
 ```
 
 ---
 
-## ⚙️ Configuration & Zero Collisions
+## 🚀 Reproducible Testing & Running Guide
 
-* **Default Ports:** UI on `127.0.0.1:5173` and Backend on `127.0.0.1:4317`.
-* **Zero Collisions:** Multi-window instances dynamically hunt the next open ports (`5174`, `4318`, etc.).
-* **Zero Manual File Editing:** Configure your settings, experience stacks, worker rules, and Tailscale password directly in the dashboard UI.
+### 1. Prerequisites
+* **Node.js:** v20.x or v22.x LTS
+* **Google Gemini API Key:** From [Google AI Studio](https://aistudio.google.com/)
+* *(Optional for Docker/Cloud):* Docker or Google Cloud SDK (`gcloud`)
 
 ---
 
-## 📜 License
+### 2. Local Quickstart (Node.js / TypeScript)
 
-This project is licensed under the **GNU General Public License v3.0 (GPLv3)**. See the [LICENSE](./LICENSE) file for details.
+```bash
+# 1. Clone the repository
+git clone https://github.com/mwiltb-design/foci-gemini-dashboard-hackathon.git
+cd foci-gemini-dashboard-hackathon
 
-Created with ❤️ by [mwiltb-design](https://github.com/mwiltb-design).
+# 2. Install dependencies
+npm install
+
+# 3. Configure environment
+cp .env.example .env
+# Edit .env and insert your GEMINI_API_KEY:
+# GEMINI_API_KEY="your-gemini-api-key"
+# FOCI_AGENT_PROVIDER="gemini"
+# GEMINI_MODEL="gemini-3.7-flash"
+
+# 4. Build frontend and compile TypeScript backend
+npm --prefix server run build:emit
+npm --prefix ui run build
+
+# 5. Start the server
+npm --prefix server run start
+```
+Open **`http://localhost:8080`** in your browser to launch the dashboard.
+
+---
+
+### 3. Automated Test Suite Execution
+
+Run the backend unit and integration test suite:
+
+```bash
+npm --prefix server run test
+```
+
+---
+
+### 4. Local Docker Container Smoke Test
+
+Test the exact production container image locally:
+
+```bash
+# 1. Build the container image
+docker build -t foci-dashboard:local .
+
+# 2. Run the container with your Gemini API key
+docker run --rm -it -p 8080:8080 \
+  -e GEMINI_API_KEY="your-api-key" \
+  -e GEMINI_MODEL="gemini-3.7-flash" \
+  -e FOCI_AGENT_PROVIDER="gemini" \
+  foci-dashboard:local
+```
+Open **`http://localhost:8080`** and verify health at **`http://localhost:8080/api/system`**.
+
+---
+
+### 5. Google Cloud Run Deployment
+
+Deploy directly to serverless Google Cloud Run:
+
+```bash
+# 1. Set your GCP Project
+gcloud config set project YOUR_GCP_PROJECT_ID
+
+# 2. Store your API Key securely in Secret Manager
+echo -n "YOUR_GEMINI_API_KEY" | gcloud secrets create GEMINI_API_KEY --data-file=-
+
+# 3. Deploy to Cloud Run
+gcloud run deploy foci-dashboard \
+  --source . \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --min-instances 0 \
+  --max-instances 2 \
+  --memory 16Gi \
+  --cpu 4 \
+  --timeout 3600 \
+  --port 8080 \
+  --set-env-vars FOCI_AGENT_PROVIDER=gemini,GEMINI_MODEL=gemini-3.7-flash,NODE_ENV=production \
+  --set-secrets GEMINI_API_KEY=GEMINI_API_KEY:latest
+```
+
+---
+
+## 🔒 Security & Environment Variables
+
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `GEMINI_API_KEY` | Google Gemini API key for primary agent and workers | Required |
+| `GEMINI_MODEL` | Primary agent model ID (`gemini-3.7-flash`, `gemini-2.5-pro`) | `gemini-3.7-flash` |
+| `FOCI_AGENT_PROVIDER` | Core agent runtime engine (`gemini` or `pi`) | `gemini` |
+| `PI_DASHBOARD_DATA_DIR` | Directory for persistent sessions, rules, and activity store | `/data/dashboard` |
+| `PI_PROJECTS_ROOT` | Directory holding active project workspaces | `/data/projects` |
+| `PI_DASHBOARD_ANTIGRAVITY_HOME` | Persistent Google OAuth credential storage volume | `/data/gemini` |
+
+---
+
+## 📄 License
+
+This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)** — see the [LICENSE](./LICENSE) file for details.
