@@ -1,7 +1,10 @@
+import { mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
+import { resolve } from 'node:path'
 import type { WebSocket } from 'ws'
 import pty from '@homebridge/node-pty-prebuilt-multiarch'
 import { findExecutable, resolveExecutable } from './process-control.js'
+import { syncGeminiAuth } from './gemini-auth-sync.js'
 
 export class WorkerConsoleSession {
   private ptyProcess: any = null
@@ -33,6 +36,23 @@ export class WorkerConsoleSession {
     if (providerId === 'antigravity-cli') {
       rawBinary = 'agy'
       args = []
+      syncGeminiAuth('restore')
+      const persistentGeminiDir = process.env.PI_DASHBOARD_ANTIGRAVITY_HOME || process.env.ANTIGRAVITY_HOME || resolve(homedir(), '.gemini')
+      const localGeminiDir = resolve(homedir(), '.gemini')
+      try {
+        mkdirSync(persistentGeminiDir, { recursive: true })
+        mkdirSync(resolve(persistentGeminiDir, 'antigravity-cli'), { recursive: true })
+        mkdirSync(resolve(persistentGeminiDir, 'antigravity-cli', 'log'), { recursive: true })
+        mkdirSync(resolve(persistentGeminiDir, 'antigravity-cli', 'crashes'), { recursive: true })
+        mkdirSync(localGeminiDir, { recursive: true })
+        mkdirSync(resolve(localGeminiDir, 'antigravity-cli'), { recursive: true })
+        mkdirSync(resolve(localGeminiDir, 'antigravity-cli', 'log'), { recursive: true })
+        mkdirSync(resolve(localGeminiDir, 'antigravity-cli', 'crashes'), { recursive: true })
+      } catch {}
+      env.HOME = homedir()
+      env.ANTIGRAVITY_HOME = persistentGeminiDir
+      delete env.GEMINI_API_KEY
+      delete env.GOOGLE_API_KEY
     } else if (providerId === 'codex-cli') {
       rawBinary = 'codex'
       args = mode === 'login' ? ['login', '--device-auth'] : []
@@ -88,6 +108,7 @@ export class WorkerConsoleSession {
           browser.send(JSON.stringify({ type: 'exit', exitCode }))
         }
         this.ptyProcess = null
+        if (providerId === 'antigravity-cli') syncGeminiAuth('persist')
       })
 
       browser.on('message', (raw: string | Buffer) => {
@@ -112,6 +133,7 @@ export class WorkerConsoleSession {
           this.ptyProcess = null
         }
         if (this.browser === browser) this.browser = null
+        if (providerId === 'antigravity-cli') syncGeminiAuth('persist')
       })
 
       // Send initial ready signal
@@ -134,5 +156,6 @@ export class WorkerConsoleSession {
     try {
       proc.kill()
     } catch {}
+    syncGeminiAuth('persist')
   }
 }

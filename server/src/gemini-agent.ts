@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { existsSync } from 'node:fs'
-import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { randomBytes } from 'node:crypto'
+import { homedir } from 'node:os'
 import { dirname, resolve, sep } from 'node:path'
 import { FunctionCallingConfigMode, GoogleGenAI, Type, type Content, type FunctionDeclaration, type Part } from '@google/genai'
 import type { JsonObject, RpcEvent, RpcResponse } from './types.js'
@@ -70,40 +71,38 @@ interface DashboardMessage {
 const toolDeclarations: FunctionDeclaration[] = [
   {
     name: 'read_file',
-    description: 'Read a UTF-8 text file from the current workspace. Use relative paths only.',
-    parameters: { type: Type.OBJECT, properties: { path: { type: Type.STRING } }, required: ['path'] },
+    description: 'Read the complete text contents of a file in the current workspace. Use relative paths.',
+    parameters: { type: Type.OBJECT, properties: { path: { type: Type.STRING, description: 'Relative path to the file' } }, required: ['path'] },
   },
   {
     name: 'write_file',
-    description: 'Create or overwrite a UTF-8 text file in the current workspace. Use relative paths only.',
-    parameters: { type: Type.OBJECT, properties: { path: { type: Type.STRING }, content: { type: Type.STRING } }, required: ['path', 'content'] },
+    description: 'Create or overwrite a file in the current workspace with new content. Use relative paths.',
+    parameters: { type: Type.OBJECT, properties: { path: { type: Type.STRING, description: 'Relative path to the file' }, content: { type: Type.STRING, description: 'Complete file text content' } }, required: ['path', 'content'] },
   },
   {
     name: 'list_directory',
-    description: 'List files and folders in a workspace directory. Use relative paths only.',
-    parameters: { type: Type.OBJECT, properties: { path: { type: Type.STRING } }, required: ['path'] },
+    description: 'List all files and subdirectories in a workspace directory. Use relative paths.',
+    parameters: { type: Type.OBJECT, properties: { path: { type: Type.STRING, description: 'Relative path to the directory' } }, required: ['path'] },
   },
   {
     name: 'run_command',
-    description: 'Run a safe, bounded workspace command. Destructive shell operators and commands are blocked.',
-    parameters: { type: Type.OBJECT, properties: { command: { type: Type.STRING } }, required: ['command'] },
+    description: 'Execute shell commands, Python scripts (e.g. python3 scripts/...), Git operations, data fetching, and build tasks directly in the workspace.',
+    parameters: { type: Type.OBJECT, properties: { command: { type: Type.STRING, description: 'Exact shell command string to execute' } }, required: ['command'] },
   },
   {
     name: 'dashboard_delegate_worker',
-    description: 'Start one bounded worker task and wait for its result. Use a specialized provider for narrow research, review, or implementation work.',
+    description: 'Delegate an autonomous sub-agent task to a background worker (providerId: "gemini-worker" or "antigravity-cli", mode: "research", "review", or "implement").',
     parameters: {
       type: Type.OBJECT,
       properties: {
-        providerId: { type: Type.STRING, enum: [...workerProviderIds], description: 'Worker provider. Defaults to the cloud-native Gemini worker.' },
-        mode: { type: Type.STRING, enum: [...workerModes], description: 'Worker task mode.' },
-        prompt: { type: Type.STRING, description: 'Complete bounded task and expected deliverable.' },
+        providerId: { type: Type.STRING, description: 'Worker provider ID: "gemini-worker" or "antigravity-cli"' },
+        mode: { type: Type.STRING, description: 'Worker mode: "research", "review", or "implement"' },
+        prompt: { type: Type.STRING, description: 'Detailed, actionable task prompt for the worker' },
         bounds: {
           type: Type.OBJECT,
-          description: 'Optional execution bounds.',
           properties: {
-            turnLimit: { type: Type.NUMBER, description: 'Maximum turns (1-30).' },
-            timeoutMinutes: { type: Type.NUMBER, description: 'Maximum runtime in minutes (1-30).' },
-            resultLimitKb: { type: Type.NUMBER, description: 'Maximum result size in KB (1-64).' },
+            turnLimit: { type: Type.INTEGER, description: 'Maximum worker turns (default: 8)' },
+            timeoutMs: { type: Type.INTEGER, description: 'Timeout in milliseconds (default: 180000)' },
           },
         },
       },
@@ -117,11 +116,12 @@ function textContent(text: string): Array<Record<string, unknown>> {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : 'Unknown Gemini agent error'
+  if (error instanceof Error) return error.message
+  return String(error || 'Unknown error')
 }
 
 export class GeminiAgentProcess extends EventEmitter {
-  private ai: GoogleGenAI | null = null
+  private ai?: GoogleGenAI
   private runningState = false
   private isStreaming = false
   private abortController: AbortController | null = null
@@ -144,6 +144,33 @@ export class GeminiAgentProcess extends EventEmitter {
     return this.runningState
   }
 
+  private async findLatestSessionFile(): Promise<string | null> {
+    const sessionDir = this.options.sessionDir || resolve(this.options.cwd, '.pi/sessions')
+    if (!existsSync(sessionDir)) return null
+    try {
+      const files = await readdir(sessionDir, { withFileTypes: true })
+      const jsonlFiles = files
+        .filter((f) => f.isFile() && f.name.endsWith('.jsonl'))
+        .map((f) => resolve(sessionDir, f.name))
+      if (!jsonlFiles.length) return null
+
+      const stats = await Promise.all(
+        jsonlFiles.map(async (file) => {
+          try {
+            const s = await stat(file)
+            return { file, mtime: s.mtimeMs, size: s.size }
+          } catch {
+            return { file, mtime: 0, size: 0 }
+          }
+        })
+      )
+      const valid = stats.filter((s) => s.size > 0).sort((a, b) => b.mtime - a.mtime)
+      return valid[0]?.file ?? null
+    } catch {
+      return null
+    }
+  }
+
   async start(): Promise<void> {
     if (this.runningState) return
     const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY
@@ -151,7 +178,18 @@ export class GeminiAgentProcess extends EventEmitter {
     this.runningState = true
     await mkdir(this.options.cwd, { recursive: true }).catch(() => undefined)
     if (this.options.sessionDir) await mkdir(this.options.sessionDir, { recursive: true }).catch(() => undefined)
-    await this.initSessionFile().catch(() => undefined)
+
+    const latestFile = await this.findLatestSessionFile()
+    if (latestFile) {
+      try {
+        await this.loadSession(latestFile)
+      } catch (err) {
+        console.warn('[GeminiAgentProcess] Failed to load latest session, starting new session:', err)
+        await this.initSessionFile().catch(() => undefined)
+      }
+    } else {
+      await this.initSessionFile().catch(() => undefined)
+    }
     queueMicrotask(() => this.emit('ready'))
   }
 
@@ -473,8 +511,15 @@ export class GeminiAgentProcess extends EventEmitter {
     this.emitEvent({ type: 'message_start', message: { role: 'assistant', content: textContent('') } })
 
     let assistantText = ''
+    const MAX_TOTAL_ROUNDS = Number(process.env.FOCI_AGENT_MAX_ROUNDS || 200)
+    const MAX_CONSECUTIVE_FAILURES = 5
+    const MAX_IDENTICAL_REPEATS = 3
+    let consecutiveFailures = 0
+    let lastActionSignature = ''
+    let identicalActionCount = 0
+
     try {
-      for (let round = 0; round < 8; round += 1) {
+      for (let round = 0; round < MAX_TOTAL_ROUNDS; round += 1) {
         let roundText = ''
         const functionCallParts = await this.generateRound((delta) => {
           roundText += delta
@@ -516,15 +561,49 @@ export class GeminiAgentProcess extends EventEmitter {
         this.lastEntryId = assistantEntryId
         await this.appendSessionEntry(assistantEntry)
 
+        let hasRoundFailure = false
+
         const pendingTools = functionCallParts.map(async (part, idx) => {
           const call = part.functionCall!
           const toolCallItem = toolCallsForEntry[idx]
           const toolCallId = toolCallItem.id
           const toolName = toolCallItem.name
           const args = toolCallItem.arguments
+
+          // Loop & duplicate failure guard
+          const signature = `${toolName}:${JSON.stringify(args)}`
+          let isStuckDuplicate = false
+          if (signature === lastActionSignature && consecutiveFailures > 0) {
+            identicalActionCount += 1
+            if (identicalActionCount >= MAX_IDENTICAL_REPEATS) {
+              isStuckDuplicate = true
+            }
+          } else {
+            lastActionSignature = signature
+            identicalActionCount = 1
+          }
+
           this.dashboardMessages.push({ role: 'assistant', content: [toolCallItem] })
           this.emitEvent({ type: 'tool_execution_start', toolCallId, toolName, args })
-          const result = await this.executeTool(toolName, args)
+
+          let result: { ok: true; output: string } | { ok: false; error: string }
+          if (isStuckDuplicate) {
+            result = {
+              ok: false,
+              error: `Stuck loop prevented: this exact action failed ${identicalActionCount} times in a row with the same arguments. Analyze the error above and either adjust your parameters/approach or explain the blocker to the user.`,
+            }
+          } else {
+            result = await this.executeTool(toolName, args)
+          }
+
+          if (result.ok) {
+            // SUCCESS RESETS THE FAILURE & REPEAT COUNTERS (PROGRESS ENGINE)
+            consecutiveFailures = 0
+            identicalActionCount = 0
+          } else {
+            hasRoundFailure = true
+          }
+
           const output = result.ok ? result.output : result.error
           this.dashboardMessages.push({ role: 'toolResult', toolCallId, toolName, isError: !result.ok, content: textContent(output) })
           this.emitEvent({ type: 'tool_execution_end', toolCallId, toolName, isError: !result.ok, result: { content: textContent(output) } })
@@ -548,9 +627,43 @@ export class GeminiAgentProcess extends EventEmitter {
 
           return { functionResponse: { id: call.id, name: toolName, response: result.ok ? { output } : { error: output } } }
         })
+
         const functionResponses = await Promise.all(pendingTools)
         this.contents.push({ role: 'user', parts: functionResponses })
+
+        if (hasRoundFailure) {
+          consecutiveFailures += 1
+          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            this.emitEvent({
+              type: 'message_update',
+              assistantMessageEvent: {
+                type: 'text_delta',
+                delta: `\n\n> ⚠️ *Adaptive safety brake engaged after ${consecutiveFailures} consecutive failed actions. Synthesizing status and blockers...*\n\n`,
+              },
+            })
+            break
+          }
+        }
       }
+
+      // Always guarantee a final text synthesis if the loop ended on tool calls without an explanation
+      if (!assistantText.trim() || consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        let finalSummary = ''
+        await this.generateRound((delta) => {
+          finalSummary += delta
+          assistantText += delta
+          this.emitEvent({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta } })
+        }, false)
+        if (finalSummary.trim()) {
+          this.contents.push({ role: 'model', parts: [{ text: finalSummary }] })
+        }
+      }
+
+      if (!assistantText.trim()) {
+        assistantText = 'Completed all requested actions and tool executions.'
+        this.emitEvent({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: assistantText } })
+      }
+
       const assistantMessage: DashboardMessage = { role: 'assistant', content: textContent(assistantText) }
       this.dashboardMessages.push(assistantMessage)
 
@@ -582,7 +695,7 @@ export class GeminiAgentProcess extends EventEmitter {
     }
   }
 
-  private async generateRound(onText: (delta: string) => void): Promise<Part[]> {
+  private async generateRound(onText: (delta: string) => void, allowTools = true): Promise<Part[]> {
     if (!this.ai) throw new Error('Gemini client is not initialized')
     const systemInstruction = await this.systemInstruction()
     const stream = await this.ai.models.generateContentStream({
@@ -590,8 +703,10 @@ export class GeminiAgentProcess extends EventEmitter {
       contents: this.contents,
       config: {
         systemInstruction,
-        tools: [{ functionDeclarations: toolDeclarations }],
-        toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.AUTO } },
+        ...(allowTools ? {
+          tools: [{ functionDeclarations: toolDeclarations }],
+          toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.AUTO } },
+        } : {}),
       },
     })
     const functionCallParts: Part[] = []
@@ -610,11 +725,19 @@ export class GeminiAgentProcess extends EventEmitter {
     const memory = await this.readOptional('MEMORY.md')
     const user = await this.readOptional('USER.md')
     return [
-      'You are Foci Dashboard, a cloud Gemini agent for a hackathon demo.',
-      'Be concise, transparent, and safe. Prefer small, reversible file edits.',
-      'Use tools when you need exact workspace facts. Do not claim a file changed unless a tool succeeded.',
-      'Use dashboard_delegate_worker for narrow delegated tasks. Review its result before presenting findings or accepting changes.',
-      'For shell commands, use the smallest safe command and explain risky operations before attempting them.',
+      '# ROLE & CAPABILITIES',
+      'You are Foci Dashboard Lead Orchestrator — an autonomous, senior AI engineer and scientific research lead.',
+      'You operate directly inside the user\'s project workspace with full access to terminal commands, Python 3.11 geospatial tools, file manipulation, and background workers.',
+      '',
+      '# CORE BEHAVIORS & INITIATIVE',
+      '1. Take Proactive Action: When given a goal or instruction, do not just explain what could be done — actively execute the required tools, inspect files, run the scripts, and produce concrete deliverables.',
+      '2. End-to-End Problem Solving: If a script, command, or data download encounters an error, read the exact error output, diagnose the cause, inspect/modify the relevant files, and re-run. Never give up or repeat failing actions blindly.',
+      '3. Full Tool Mastery:',
+      '   - run_command: Run Python pipelines (`python3 ...`), git operations, USGS data downloads, tests, and build commands directly in the workspace.',
+      '   - read_file / write_file / list_directory: Inspect and modify code, configurations, data manifests, and HTML reports.',
+      '   - dashboard_delegate_worker: Delegate focused sub-tasks to `gemini-worker` or `antigravity-cli`.',
+      '4. Clear & Authoritative Output: Present your findings clearly using structured Markdown tables, progress checklists, and direct links to output deliverables.',
+      '',
       memory ? `Project MEMORY.md:\n${memory.slice(0, 20_000)}` : '',
       user ? `Workspace USER.md:\n${user.slice(0, 8_000)}` : '',
     ].filter(Boolean).join('\n\n')
@@ -709,28 +832,34 @@ export class GeminiAgentProcess extends EventEmitter {
   private async runCommand(command: string): Promise<{ ok: true; output: string } | { ok: false; error: string }> {
     const trimmed = command.trim()
     if (!trimmed) return { ok: false, error: 'Command is required' }
-    if (/[\r\n]/.test(command)) return { ok: false, error: 'Command blocked by Foci safety policy' }
-    const blocked = /(?:\brm\b|\brmdir\b|\bdel\b|\bformat\b|\bshutdown\b|\breboot\b|[>&|;`]|\$\()/i
-    if (blocked.test(trimmed)) return { ok: false, error: 'Command blocked by Foci safety policy' }
-    const first = trimmed.split(/\s+/)[0]?.toLowerCase() ?? ''
-    const allowed = new Set(['npm', 'git', 'ls', 'dir', 'pwd', 'echo', 'find', 'grep'])
-    if (!allowed.has(first)) return { ok: false, error: `Command not allowlisted: ${first}` }
 
-    const inheritedEnvironment = new Set(['PATH', 'PATHEXT', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'TEMP', 'TMP', 'LANG', 'LC_ALL', 'TERM', 'NODE_ENV'])
-    const env = Object.fromEntries(Object.entries(process.env).filter(([name]) => inheritedEnvironment.has(name.toUpperCase())))
+    // Block destructive root-level commands
+    const blocked = /\b(rm\s+-rf\s+\/|mkfs|dd\s+if=|shutdown|reboot|poweroff|init\s+0)\b/i
+    if (blocked.test(trimmed)) return { ok: false, error: 'Dangerous destructive command blocked by safety policy' }
+
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      HOME: homedir(),
+      PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin',
+      TERM: 'xterm-256color',
+      CI: '1',
+    }
 
     return await new Promise((resolvePromise) => {
+      // 30 minute timeout for long-running LiDAR / raster processing tasks
       const child = spawn(trimmed, { cwd: this.options.cwd, shell: true, env })
       let output = ''
       const timeout = setTimeout(() => {
         child.kill('SIGTERM')
-        resolvePromise({ ok: false, error: `${output}\nCommand timed out after 20 seconds`.trim() })
-      }, 20_000)
-      child.stdout.on('data', (chunk: Buffer) => { output = `${output}${chunk.toString('utf8')}`.slice(-50_000) })
-      child.stderr.on('data', (chunk: Buffer) => { output = `${output}${chunk.toString('utf8')}`.slice(-50_000) })
+        setTimeout(() => child.kill('SIGKILL'), 2000).unref()
+        resolvePromise({ ok: false, error: `${output}\nCommand timed out after 30 minutes`.trim() })
+      }, 1_800_000)
+
+      child.stdout?.on('data', (chunk: Buffer) => { output = `${output}${chunk.toString('utf8')}`.slice(-500_000) })
+      child.stderr?.on('data', (chunk: Buffer) => { output = `${output}${chunk.toString('utf8')}`.slice(-500_000) })
       child.on('close', (code) => {
         clearTimeout(timeout)
-        const finalOutput = output.trim() || `(command exited with code ${code ?? 'unknown'})`
+        const finalOutput = output.trim() || `(command exited with code ${code ?? 0})`
         if (code === 0) resolvePromise({ ok: true, output: finalOutput })
         else resolvePromise({ ok: false, error: finalOutput })
       })

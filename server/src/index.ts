@@ -1,5 +1,5 @@
 import './load-env.js'
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { readFile, stat } from 'node:fs/promises'
@@ -23,6 +23,25 @@ import { PluginError, PluginService } from './plugin-service.js'
 import { NativeTerminalSession } from './terminal-session.js'
 import { ProviderLoginSession } from './provider-login-session.js'
 import { safePreviewHeaders } from './preview-policy.js'
+
+// Configure Git system/global defaults for GCS FUSE and anonymous identity
+try {
+  const gitConfigCommands = [
+    ['config', '--global', 'user.name', 'Foci Developer'],
+    ['config', '--global', 'user.email', 'developer@foci.local'],
+    ['config', '--global', 'core.filemode', 'false'],
+    ['config', '--global', 'core.trustctime', 'false'],
+    ['config', '--global', 'core.checkStat', 'minimal'],
+    ['config', '--global', 'init.defaultBranch', 'main'],
+    ['config', '--global', 'init.templateDir', ''],
+    ['config', '--global', 'safe.directory', '*'],
+  ]
+  for (const cmd of gitConfigCommands) {
+    try { execFileSync('git', cmd, { stdio: 'ignore' }) } catch {}
+  }
+} catch {}
+import { syncGeminiAuth } from './gemini-auth-sync.js'
+syncGeminiAuth('restore')
 import { dashboardProfile, type DashboardFeature, ALWAYS_ENABLED_FEATURES, OPTIONAL_FEATURES, STACK_PRESETS, DASHBOARD_FEATURES, type DashboardStackPreset } from './profile.js'
 import { SessionArchiveService } from './session-archive.js'
 import { SessionCatalog } from './session-catalog.js'
@@ -367,7 +386,7 @@ async function reloadRpcResources(): Promise<void> {
   broadcast({ type: 'skills_changed' })
 }
 
-async function switchActiveWorkspace(targetWorkspace: string): Promise<{ workspace: string; projectSlug: string }> {
+async function switchActiveWorkspace(targetWorkspace: string): Promise<{ workspace: string; projectSlug: string; activeSessionId?: string }> {
   targetWorkspace = resolve(targetWorkspace)
   if (!existsSync(targetWorkspace)) {
     throw new Error(`Workspace path does not exist: ${targetWorkspace}`)
@@ -492,13 +511,15 @@ async function switchActiveWorkspace(targetWorkspace: string): Promise<{ workspa
   ])
 
   await rpc.start()
+  const currentState = await state()
+  rememberState(currentState)
   await sendSnapshot()
   broadcast({ type: 'workspace_changed' })
   broadcast({ type: 'sessions_changed' })
   broadcast({ type: 'skills_changed' })
   record({ category: 'system', type: 'workspace_switched', severity: 'info', summary: `Switched active workspace to "${projectSlug}"` })
 
-  return { workspace, projectSlug }
+  return { workspace, projectSlug, activeSessionId: currentSessionId }
 }
 
 function requireFeature(feature: DashboardFeature): void {

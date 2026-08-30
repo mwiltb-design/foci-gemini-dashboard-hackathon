@@ -80,6 +80,13 @@ export function useProjects() {
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Failed to switch project')
+      if (json && typeof json.activeSessionId === 'string') {
+        try {
+          const map = JSON.parse(localStorage.getItem('foci_last_active_sessions') || '{}')
+          map[projectPath] = json.activeSessionId
+          localStorage.setItem('foci_last_active_sessions', JSON.stringify(map))
+        } catch {}
+      }
       refresh()
       window.location.reload()
       return true

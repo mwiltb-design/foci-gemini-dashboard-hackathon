@@ -42,29 +42,29 @@ export class GitService {
     try {
       const topLevel = (await this.run(['rev-parse', '--show-toplevel'])).trim()
       if (resolve(topLevel) !== resolve(this.root)) return this.empty(false)
+
+      const [branch, commit, porcelain] = await Promise.all([
+        this.run(['branch', '--show-current']).then((value) => value.trim()).catch(() => 'main'),
+        this.run(['rev-parse', '--short', 'HEAD']).then((value) => value.trim()).catch(() => ''),
+        this.run(['status', '--porcelain=v1', '-z', '--untracked-files=all']).catch(() => ''),
+      ])
+      const records = porcelain.split('\0')
+      const entries: GitStatusEntry[] = []
+      for (let index = 0; index < records.length; index += 1) {
+        const record = records[index]
+        if (!record || record.length < 4) continue
+        const indexState = record[0]
+        const workingTree = record[1]
+        const path = record.slice(3)
+        entries.push({ path, index: indexState, workingTree, state: stateFor(indexState, workingTree) })
+        if (indexState === 'R' || indexState === 'C') index += 1
+      }
+      const counts = this.counts()
+      for (const entry of entries) counts[entry.state] += 1
+      return { available: true, branch: branch || 'HEAD', commit, clean: entries.length === 0, entries, counts }
     } catch {
       return this.empty(false)
     }
-
-    const [branch, commit, porcelain] = await Promise.all([
-      this.run(['branch', '--show-current']).then((value) => value.trim()),
-      this.run(['rev-parse', '--short', 'HEAD']).then((value) => value.trim()).catch(() => ''),
-      this.run(['status', '--porcelain=v1', '-z', '--untracked-files=all']),
-    ])
-    const records = porcelain.split('\0')
-    const entries: GitStatusEntry[] = []
-    for (let index = 0; index < records.length; index += 1) {
-      const record = records[index]
-      if (!record || record.length < 4) continue
-      const indexState = record[0]
-      const workingTree = record[1]
-      const path = record.slice(3)
-      entries.push({ path, index: indexState, workingTree, state: stateFor(indexState, workingTree) })
-      if (indexState === 'R' || indexState === 'C') index += 1
-    }
-    const counts = this.counts()
-    for (const entry of entries) counts[entry.state] += 1
-    return { available: true, branch: branch || 'HEAD', commit, clean: entries.length === 0, entries, counts }
   }
 
   async diff(path: string): Promise<{ path: string; diff: string; truncated: boolean }> {
@@ -95,7 +95,8 @@ export class GitService {
   }
 
   private async run(args: string[]): Promise<string> {
-    const result = await execute('git', args, { cwd: this.root, encoding: 'utf8', maxBuffer: MAX_GIT_OUTPUT + 1024, timeout: 15_000 })
+    const safeFlags = ['-c', 'core.filemode=false', '-c', 'core.trustctime=false', '-c', 'safe.directory=*']
+    const result = await execute('git', [...safeFlags, ...args], { cwd: this.root, encoding: 'utf8', maxBuffer: MAX_GIT_OUTPUT + 1024, timeout: 15_000 })
     return result.stdout
   }
 

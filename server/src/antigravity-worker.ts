@@ -1,14 +1,15 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import type { GitService, GitStatusEntry } from './git-service.js'
 import { findExecutable, processGroupOptions, resolveExecutable, terminateProcess } from './process-control.js'
 import type { WorkerAdapter, WorkerChangedFile, WorkerMode, WorkerProviderStatus, WorkerRunHooks, WorkerRunInput, WorkerRunOutput } from './worker-types.js'
 
-function hasConcreteFile(path: string): boolean {
+function hasConcreteFileOrDir(path: string): boolean {
   try {
-    return statSync(path).isFile()
+    const s = statSync(path)
+    return s.isFile() || s.isDirectory()
   } catch {
     return false
   }
@@ -39,19 +40,18 @@ function workerPrompt(input: WorkerRunInput, workspace: string): string {
     : input.mode === 'review'
       ? 'Review the requested changes or code in the workspace and provide a structured assessment.'
       : 'Research the workspace and answer the question with precise evidence.'
-  const rules = input.ruleContext ? `\nGuidelines:\n${input.ruleContext}\n` : ''
 
   return [
     `Mode: ${input.mode}`,
     `Workspace: ${workspace}`,
     role,
-    rules,
+    '',
     'Task:',
     input.prompt,
   ].join('\n')
 }
 
-export function cleanEnvironment(antigravityHome?: string): NodeJS.ProcessEnv {
+export function cleanEnvironment(antigravityHome?: string, preferOAuth = false): NodeJS.ProcessEnv {
   const environment = { ...process.env }
 
   // Strip dashboard and internal tokens to prevent credential exposure
@@ -60,15 +60,21 @@ export function cleanEnvironment(antigravityHome?: string): NodeJS.ProcessEnv {
   delete environment.OPENROUTER_API_KEY
   delete environment.CODEX_HOME
 
-  // Ensure Gemini/Google API keys are normalized and present for headless/API mode
-  const apiKey = environment.GEMINI_API_KEY?.trim() || environment.GOOGLE_API_KEY?.trim()
-  if (apiKey) {
-    if (!environment.GEMINI_API_KEY) environment.GEMINI_API_KEY = apiKey
-    if (!environment.GOOGLE_API_KEY) environment.GOOGLE_API_KEY = apiKey
-  }
+  const targetHome = antigravityHome || process.env.PI_DASHBOARD_ANTIGRAVITY_HOME || process.env.ANTIGRAVITY_HOME || resolve(homedir(), '.gemini')
+  environment.ANTIGRAVITY_HOME = targetHome
+  environment.HOME = homedir()
 
-  if (antigravityHome) {
-    environment.ANTIGRAVITY_HOME = antigravityHome
+  if (preferOAuth) {
+    // When using OAuth subscription credentials, do not override with API key
+    delete environment.GEMINI_API_KEY
+    delete environment.GOOGLE_API_KEY
+  } else {
+    // Ensure Gemini/Google API keys are normalized and present for headless/API fallback mode
+    const apiKey = environment.GEMINI_API_KEY?.trim() || environment.GOOGLE_API_KEY?.trim()
+    if (apiKey) {
+      environment.GEMINI_API_KEY = apiKey
+      environment.GOOGLE_API_KEY = apiKey
+    }
   }
 
   // Non-interactive and CI indicators for background worker execution
@@ -90,21 +96,40 @@ export class AntigravityWorkerAdapter implements WorkerAdapter {
 
   constructor(private readonly options: AntigravityWorkerOptions) {}
 
-  get provider(): WorkerProviderStatus {
-    const hasExecutable = Boolean(findExecutable('agy'))
+  private hasOAuthAuth(): boolean {
     const defaultHome = this.options.antigravityHome ?? join(homedir(), '.gemini')
     const cliHome = join(defaultHome, 'antigravity-cli')
-    const hasApiKey = Boolean(process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim())
-    const allowApiKeyAuth = ['1', 'true', 'yes'].includes((process.env.FOCI_ANTIGRAVITY_API_KEY_AUTH ?? '').toLowerCase())
-    const tokenPaths = [
+    const userGemini = join(homedir(), '.gemini')
+    const userAgy = join(userGemini, 'antigravity-cli')
+    const candidatePaths = [
       join(cliHome, 'antigravity-oauth-token'),
       join(cliHome, 'oauth_credentials.json'),
       join(cliHome, 'auth.json'),
+      join(cliHome, 'conversations'),
       join(defaultHome, 'antigravity-oauth-token'),
       join(defaultHome, 'oauth_credentials.json'),
       join(defaultHome, 'auth.json'),
+      join(defaultHome, 'antigravity_state.pbtxt'),
+      join(defaultHome, 'config', 'config.json'),
+      join(userAgy, 'antigravity-oauth-token'),
+      join(userAgy, 'oauth_credentials.json'),
+      join(userAgy, 'auth.json'),
+      join(userAgy, 'conversations'),
+      join(userGemini, 'antigravity-oauth-token'),
+      join(userGemini, 'oauth_credentials.json'),
+      join(userGemini, 'auth.json'),
+      join(userGemini, 'antigravity_state.pbtxt'),
+      join(userGemini, 'config', 'config.json'),
     ]
-    const hasLocalAuth = tokenPaths.some((tokenPath) => hasConcreteFile(tokenPath))
+    return candidatePaths.some((p) => hasConcreteFileOrDir(p))
+  }
+
+  get provider(): WorkerProviderStatus {
+    const hasExecutable = Boolean(findExecutable('agy'))
+    const hasLocalAuth = this.hasOAuthAuth()
+    const hasApiKey = Boolean(process.env.GEMINI_API_KEY?.trim() || process.env.GOOGLE_API_KEY?.trim())
+    const explicitApiKeyAuth = (process.env.FOCI_ANTIGRAVITY_API_KEY_AUTH ?? '').toLowerCase()
+    const allowApiKeyAuth = ['1', 'true', 'yes'].includes(explicitApiKeyAuth)
     const authenticated = hasLocalAuth || (allowApiKeyAuth && hasApiKey)
     const ready = this.options.enabled && hasExecutable && authenticated
 
@@ -119,10 +144,8 @@ export class AntigravityWorkerAdapter implements WorkerAdapter {
         : !hasExecutable
           ? 'Desktop CLI not detected on server'
           : ready
-            ? (allowApiKeyAuth && hasApiKey && !hasLocalAuth ? 'Ready (API Key)' : 'Installed and ready')
-            : hasApiKey
-              ? 'Installed; API key detected but Antigravity CLI requires OAuth in this runtime'
-              : 'Installed; select Connect to sign in',
+            ? (hasLocalAuth ? 'Installed and ready (OAuth Subscription)' : 'Ready (API Key)')
+            : 'Installed; select Connect to sign in with your Google account',
       modes: ['research', 'review', 'implement'] as WorkerMode[],
       enabled: this.options.enabled,
       loginCommand: 'exec agy',
@@ -139,6 +162,7 @@ export class AntigravityWorkerAdapter implements WorkerAdapter {
     const before = (await this.options.git.status()).entries
     const timeout = `${Math.max(60, Math.ceil(input.bounds.timeoutMs / 1_000))}s`
     const command = resolveExecutable('agy')
+    const hasLocalAuth = this.hasOAuthAuth()
     const args = [
       '--add-dir', this.options.workspace,
       '--print', workerPrompt(input, this.options.workspace),
@@ -151,7 +175,7 @@ export class AntigravityWorkerAdapter implements WorkerAdapter {
 
     const child = spawn(command, args, {
       cwd: this.options.workspace,
-      env: cleanEnvironment(this.options.antigravityHome),
+      env: cleanEnvironment(this.options.antigravityHome, hasLocalAuth),
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
       ...processGroupOptions(),
