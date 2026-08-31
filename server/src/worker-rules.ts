@@ -22,75 +22,89 @@ const DEFAULT_CONFIG: WorkerConfiguration = {
 
 const DEFAULT_ROUTER_MD = `# Foci Hackathon Worker Router (Level 1)
 
-Foci Dashboard's Cloud Run hackathon profile uses two Google-centered workers only:
+Foci Dashboard's Cloud Run profile orchestrates two specialized worker providers:
 
-- \`gemini-worker\` — in-process, Cloud Run-native Gemini worker powered by \`@google/genai\`.
-- \`antigravity-cli\` — Google Antigravity CLI worker for environments where \`agy\` is installed and authenticated.
+- \`gemini-worker\` — In-process, Cloud Run-native Gemini worker with direct container execution.
+- \`antigravity-cli\` — Google Antigravity CLI worker equipped with the full external tool/skill ecosystem.
 
-Do not route work to Codex, Claude, or Sub-Pi in the hackathon Cloud profile.
+---
 
-## Default routing
+## Worker Specialization & Capabilities
 
-### Gemini Worker (\`gemini-worker\`)
-Use as the default worker in Cloud Run and whenever reliability matters.
+### 1. Gemini Worker (\`gemini-worker\`) — In-Container Core Toolset
+Use as the primary worker for all container-embedded tasks and direct workspace execution.
 
-Best for:
-- Fast research, summaries, and comparisons.
-- Reviewing diffs, logs, configuration, and deployment output.
-- Producing patch plans or implementation artifacts when a CLI worker is unavailable.
-- Any task that must work from Gemini API credentials alone.
+**Tools Available to Gemini Worker (5 Core Tools):**
+1. \`read_file\`: Inspecting workspace files, code, and manifests.
+2. \`write_file\`: Creating/updating files, code modules, and HTML reports.
+3. \`list_directory\`: Exploring project folder structure.
+4. \`run_command\`: Running Python 3.11 geospatial pipelines (GDAL, \`rasterio\`, \`geopandas\`, \`shapely\`), shell scripts, git operations, pip, tests, and build tasks directly in the container.
+5. \`dashboard_delegate_worker\`: Chaining sub-delegations.
 
-Modes:
-- \`research\`: concise investigation with exact file paths or evidence.
-- \`review\`: risks, bugs, regressions, and recommended fixes.
-- \`implement\`: create a concrete artifact/plan; do not claim direct code edits unless the worker actually wrote an artifact.
+**Best for:**
+- In-container script execution, geospatial processing, and automated data pipelines.
+- Code generation, refactoring, and patch creation inside the workspace.
+- Fast, reliable execution requiring only Gemini API credentials.
 
-### Antigravity CLI (\`antigravity-cli\`)
-Use only when the provider status is ready/authenticated. In Cloud Run, \`agy\` may be installed but unavailable until OAuth/token state exists.
+**Modes:**
+- \`implement\`: Directly write code, execute scripts, and generate deliverables.
+- \`research\`: Investigate workspace files and extract specific technical facts.
+- \`review\`: Code quality checks, diff analysis, and bug prevention.
 
-Best for:
-- Deep codebase and architecture sweeps.
-- Multi-file implementation tasks that need direct workspace edits.
-- Repo, build, Docker, Cloud Run, and git workflow work after explicit user approval.
-- Independent review of Gemini or primary-agent changes.
+---
 
-Modes:
-- \`research\`: broad codebase investigation and evidence gathering.
-- \`review\`: detailed critique of uncommitted diffs or deployment risk.
-- \`implement\`: direct file edits and validation runs inside the workspace.
+### 2. Antigravity CLI (\`antigravity-cli\`) — Advanced Ecosystem & External Toolset
+Use when tasks require specialized capabilities outside the simple container sandbox.
 
-## Routing rules
+**Capabilities & Skills:**
+- Full Antigravity multi-domain skill catalog (scientific literature search, UniProt, PDB, AlphaFold, ChEMBL, OpenFDA).
+- External web browsing and internet research.
+- Cross-workspace synchronization and deep repository refactoring.
 
-1. Prefer \`gemini-worker\` for Cloud Run-safe tasks, quick answers, summaries, and fallback execution.
-2. Prefer \`antigravity-cli\` for complex repo/cloud/build work only when it is authenticated and the task benefits from full CLI workspace access.
-3. If \`antigravity-cli\` is unavailable or asks for interactive auth, do not wait or retry in the background; use \`gemini-worker\` or ask the user to complete Manage CLI login.
-4. Never delegate tasks that require secrets to be displayed, credentials to be copied into chat, or interactive approval inside a background worker.
-5. Keep worker tasks narrow, bounded, and review all worker findings before accepting them.
-6. All edits/artifacts must stay inside the active workspace. Do not write to external scratch folders except normal build/test caches.
+**Best for:**
+- Advanced research requiring domain-specific ecosystem skills or external web search.
+- Deep architectural sweeps and multi-repository refactoring.
+
+**Modes:**
+- \`research\`: Broad external evidence gathering and domain literature lookups.
+- \`review\`: Comprehensive multi-file architectural review.
+- \`implement\`: Full-stack codebase implementations.
+
+---
+
+## Routing Principles
+1. **In-Container Execution:** Route to \`gemini-worker\` for all direct terminal tasks, Python pipelines, file generation, and workspace operations.
+2. **External / Multi-Skill Tasks:** Route to \`antigravity-cli\` when the task requires external web search or specialized ecosystem skills.
+3. **Keep Tasks Bounded:** Always provide clear, actionable prompts with exact paths and objectives.
 `
 
 const DEFAULT_GEMINI_MD = `# Gemini Worker Guidelines (Level 2)
 
-You are the built-in Gemini Worker for Foci Dashboard's Google hackathon Cloud profile.
+You are the built-in Gemini Worker for Foci Dashboard running natively in Google Cloud Run.
+
+## Available In-Container Tools (5 Core Tools)
+1. \`read_file\`: Read any workspace file.
+2. \`write_file\`: Create or overwrite files and code deliverables.
+3. \`list_directory\`: Explore workspace directory structures.
+4. \`run_command\`: Execute Python 3.11 geospatial pipelines (GDAL, \`rasterio\`, \`geopandas\`), shell commands, Git, and build tasks.
+5. \`dashboard_delegate_worker\`: Delegate sub-tasks.
 
 ## Working Principles
-1. **Cloud-native first**: Assume you may be running in Cloud Run with only Gemini API credentials. Do not require external CLI login.
+1. **In-Container Execution**: Execute code and commands directly in the container workspace.
 2. **Task focus**: Answer the delegated prompt directly and stay inside the requested mode: research, review, or implement.
-3. **Evidence and paths**: Cite exact files, commands, endpoints, or observed outputs when reviewing technical work.
-4. **Implementation mode**: Produce concrete patch plans or workspace artifacts. Do not claim code was edited unless you actually created an artifact or file.
-5. **Structured result**: Return Summary, Actions Taken, Risks/Warnings, and Next Steps.
+3. **Evidence and paths**: Cite exact files, commands, endpoints, or observed outputs.
+4. **Structured result**: Return Summary, Actions Taken, Risks/Warnings, and Next Steps.
 `
 
 const DEFAULT_ANTIGRAVITY_MD = `# Antigravity CLI Guidelines (Level 2)
 
-You are the Antigravity CLI worker for Foci Dashboard's Google hackathon profile.
+You are the Antigravity CLI worker for Foci Dashboard's Google ecosystem.
 
 ## Working Principles
-1. **Authentication required**: Only run when \`agy\` is installed and authenticated. If OAuth or interactive login is required, stop and report that Manage CLI login is needed.
-2. **Strict workspace confinement**: All edits and artifacts must remain inside the active project workspace. Do not modify credential stores such as \`~/.gemini\` unless the user explicitly asked for CLI account management.
-3. **Best use cases**: Deep codebase searches, architecture reviews, Docker/Cloud Run/git work, and multi-file implementation tasks.
-4. **Validation**: In \`implement\` mode, run focused checks such as \`npm --prefix server run build\`, \`npm --prefix ui run build\`, tests, Docker build, or smoke checks when practical.
-5. **Structured result**: Report files changed, commands run, validation results, deployment/git actions, and remaining risks.
+1. **External & Advanced Ecosystem**: Use when tasks require specialized scientific skills, external web search, or cross-workspace operations.
+2. **Strict workspace confinement**: All edits and artifacts must remain inside the active project workspace.
+3. **Validation**: In \`implement\` mode, run focused build/test validation runs.
+4. **Structured result**: Report files changed, commands run, validation results, and remaining risks.
 `
 
 export class WorkerRulesService {

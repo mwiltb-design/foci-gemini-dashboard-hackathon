@@ -69,6 +69,11 @@ export interface PluginToolCatalogSource {
 }
 
 const builtins: Record<string, { description: string; access: ToolAccess; risk: ToolRisk; parameters: string[] }> = {
+  read_file: { description: 'Read complete text contents of a workspace file.', access: 'read', risk: 'low', parameters: ['path'] },
+  write_file: { description: 'Create or overwrite files, code deliverables, and reports in the workspace.', access: 'write', risk: 'high', parameters: ['path', 'content'] },
+  list_directory: { description: 'List files and subdirectories in the workspace.', access: 'read', risk: 'low', parameters: ['path'] },
+  run_command: { description: 'Execute Python 3.11 geospatial pipelines (GDAL, rasterio, geopandas), shell scripts, git commands, and build tasks.', access: 'execute', risk: 'high', parameters: ['command'] },
+  dashboard_delegate_worker: { description: 'PRIMARY EXECUTION BUS: Delegate autonomous tasks to background workers (gemini-worker or antigravity-cli).', access: 'custom', risk: 'medium', parameters: ['providerId', 'mode', 'prompt', 'bounds'] },
   read: { description: 'Read text files and images from the working environment.', access: 'read', risk: 'low', parameters: ['path', 'offset', 'limit'] },
   grep: { description: 'Search file contents without running a shell command.', access: 'read', risk: 'low', parameters: ['pattern', 'path', 'glob', 'limit'] },
   find: { description: 'Find files by name or glob pattern.', access: 'read', risk: 'low', parameters: ['pattern', 'path', 'limit'] },
@@ -79,11 +84,12 @@ const builtins: Record<string, { description: string; access: ToolAccess; risk: 
 }
 
 const shellPrograms = [
-  { name: 'git', label: 'Git', description: 'Version control, history, branches, and diffs.' },
-  { name: 'rg', label: 'ripgrep', description: 'Fast recursive text and file searching.' },
-  { name: 'fd', label: 'fd', description: 'Fast filename searching when installed.' },
+  { name: 'python3', label: 'Python 3.11', description: 'Python geospatial execution environment (GDAL, rasterio, geopandas, scipy, shapely).' },
+  { name: 'git', label: 'Git', description: 'Version control, history, branches, and native Cloud Storage FUSE commits.' },
   { name: 'node', label: 'Node.js', description: 'JavaScript and TypeScript application runtime.' },
   { name: 'npm', label: 'npm', description: 'Node.js package and script manager.' },
+  { name: 'rg', label: 'ripgrep', description: 'Fast recursive text and file searching.' },
+  { name: 'fd', label: 'fd', description: 'Fast filename searching when installed.' },
   { name: 'bash', label: 'Bash', description: 'The shell used to execute command lines.' },
 ]
 
@@ -103,11 +109,14 @@ export class ToolService {
   async get(pluginSources: PluginToolCatalogSource[] = []): Promise<{ capturedAt?: string; tools: RuntimeTool[]; shell: ShellCapability[] }> {
     const snapshot = await this.snapshot()
     const byName = new Map<string, RuntimeTool>()
+    const isGeminiMode = process.env.FOCI_AGENT_PROVIDER === 'gemini' || true
     for (const [name, definition] of Object.entries(builtins)) {
+      const isGeminiBuiltin = ['read_file', 'write_file', 'list_directory', 'run_command', 'dashboard_delegate_worker'].includes(name)
+      const active = isGeminiBuiltin ? isGeminiMode : false
       byName.set(name, {
-        name, description: definition.description, active: false, available: true, source: 'builtin', scope: 'runtime', origin: 'top-level',
+        name, description: definition.description, active, available: true, source: isGeminiBuiltin ? 'gemini-runtime' : 'builtin', scope: 'runtime', origin: 'top-level',
         access: definition.access, risk: definition.risk, parameterNames: definition.parameters, promptGuidelines: [],
-        piAccess: false, status: 'Available built-in; not active in the current PI session',
+        piAccess: active, status: active ? 'Active in the current Gemini session' : 'Available built-in; not active in the current session',
       })
     }
     for (const tool of snapshot.tools ?? []) {
