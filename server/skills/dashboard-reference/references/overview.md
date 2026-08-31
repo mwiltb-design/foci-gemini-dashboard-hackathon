@@ -1,6 +1,8 @@
-# Pi Dashboard Overview
+# Foci / Pi Dashboard Overview
 
-Pi Dashboard 2.0 is a modern, native desktop application (built with Electron, React, Node.js, and TypeScript) and agent execution environment for the Pi Coding Agent. It keeps project files, Pi credentials, sessions, plugin state, and dashboard settings strictly separated.
+Foci Dashboard 2.0 is an autonomous, multi-agent AI collaboration platform and engineering workspace available in two deployment modes:
+1. **Google Cloud Run (Hosted Cloud Studio):** Fully containerized, serverless cloud workspace with persistent Google Cloud Storage (`/data`), Python 3.11 geospatial compute stack, and Lead Gemini ⇄ Worker autonomous delegation.
+2. **Native Desktop Application:** Local Electron + Node.js + React desktop app running directly on your workstation with local pseudo-terminal and optional Tailscale Serve remote connectivity.
 
 ## Primary Product Shape
 
