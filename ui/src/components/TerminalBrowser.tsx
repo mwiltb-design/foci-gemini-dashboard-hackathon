@@ -64,7 +64,6 @@ function TerminalSession({ shell, onStatus }: { shell: ShellType; onStatus: (sta
         if (message.type === 'ready') {
           ready = true
           terminal.options.disableStdin = false
-          terminal.clear()
           onStatus('ready')
           resize()
           terminal.focus()
@@ -106,7 +105,7 @@ function TerminalSession({ shell, onStatus }: { shell: ShellType; onStatus: (sta
 }
 
 export function TerminalBrowser() {
-  const [selectedShell, setSelectedShell] = useState<ShellType>('powershell')
+  const [selectedShell, setSelectedShell] = useState<ShellType>('bash')
   const [generation, setGeneration] = useState(0)
   const [active, setActive] = useState(true)
   const [status, setStatus] = useState<TerminalStatus>('connecting')

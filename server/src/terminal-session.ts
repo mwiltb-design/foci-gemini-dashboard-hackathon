@@ -48,13 +48,32 @@ export class NativeTerminalSession {
 
       this.ptyProcess = proc
 
-      proc.onData((data: string) => {
-        if (browser.readyState === 1 /* WebSocket.OPEN */) {
-          browser.send(JSON.stringify({ type: 'output', data }))
+      let outputBuffer = ''
+      let flushTimer: ReturnType<typeof setTimeout> | null = null
+      const flushOutput = () => {
+        flushTimer = null
+        if (!outputBuffer || browser.readyState !== 1 /* WebSocket.OPEN */) return
+        const data = outputBuffer
+        outputBuffer = ''
+        browser.send(JSON.stringify({ type: 'output', data }))
+      }
+      const queueOutput = (data: string) => {
+        outputBuffer += data
+        if (outputBuffer.length >= 2048) {
+          if (flushTimer) clearTimeout(flushTimer)
+          flushOutput()
+        } else if (!flushTimer) {
+          flushTimer = setTimeout(flushOutput, 10)
         }
+      }
+
+      proc.onData((data: string) => {
+        queueOutput(data)
       })
 
       proc.onExit(({ exitCode }: { exitCode: number }) => {
+        if (flushTimer) clearTimeout(flushTimer)
+        flushOutput()
         if (browser.readyState === 1) {
           browser.send(JSON.stringify({ type: 'exit', exitCode }))
         }
@@ -78,6 +97,8 @@ export class NativeTerminalSession {
       })
 
       browser.on('close', () => {
+        if (flushTimer) clearTimeout(flushTimer)
+        outputBuffer = ''
         if (this.ptyProcess) {
           try { this.ptyProcess.kill() } catch {}
           this.ptyProcess = null

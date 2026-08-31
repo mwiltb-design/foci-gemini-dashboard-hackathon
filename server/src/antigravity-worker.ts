@@ -93,10 +93,13 @@ export interface AntigravityWorkerOptions {
 
 export class AntigravityWorkerAdapter implements WorkerAdapter {
   private active?: { taskId: string; child: ChildProcess }
+  private authCache?: { checkedAt: number; hasOAuth: boolean }
 
   constructor(private readonly options: AntigravityWorkerOptions) {}
 
   private hasOAuthAuth(): boolean {
+    const now = Date.now()
+    if (this.authCache && now - this.authCache.checkedAt < 30_000) return this.authCache.hasOAuth
     const defaultHome = this.options.antigravityHome ?? join(homedir(), '.gemini')
     const cliHome = join(defaultHome, 'antigravity-cli')
     const userGemini = join(homedir(), '.gemini')
@@ -121,7 +124,9 @@ export class AntigravityWorkerAdapter implements WorkerAdapter {
       join(userGemini, 'antigravity_state.pbtxt'),
       join(userGemini, 'config', 'config.json'),
     ]
-    return candidatePaths.some((p) => hasConcreteFileOrDir(p))
+    const hasOAuth = candidatePaths.some((p) => hasConcreteFileOrDir(p))
+    this.authCache = { checkedAt: now, hasOAuth }
+    return hasOAuth
   }
 
   get provider(): WorkerProviderStatus {

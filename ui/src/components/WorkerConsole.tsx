@@ -109,9 +109,6 @@ export function WorkerConsole({ providerId, providerName, mode, onClose, onStatu
         if (message.type === 'ready') {
           ready = true
           terminal.options.disableStdin = false
-          try {
-            terminal.clear()
-          } catch {}
           performFit()
           try {
             terminal.focus()

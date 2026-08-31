@@ -1686,6 +1686,17 @@ const webSocketServer = new WebSocketServer({ noServer: true, maxPayload: 256 * 
 const terminalWebSocketServer = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 })
 const providerLoginWebSocketServer = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 })
 const workerConsoleWebSocketServer = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 })
+const allWebSocketServers = [webSocketServer, terminalWebSocketServer, providerLoginWebSocketServer, workerConsoleWebSocketServer]
+const webSocketHeartbeat = setInterval(() => {
+  for (const wsServer of allWebSocketServers) {
+    for (const client of wsServer.clients) {
+      if (client.readyState === WebSocket.OPEN) {
+        try { client.ping() } catch {}
+      }
+    }
+  }
+}, 25_000)
+webSocketHeartbeat.unref()
 
 server.on('upgrade', (request, socket, head) => {
   const origin = request.headers.origin
@@ -1849,9 +1860,10 @@ async function handleCommand(socket: WebSocket, command: BrowserCommand): Promis
 async function shutdown(signal: string): Promise<void> {
   console.log(`Received ${signal}; shutting down`)
   record({ category: 'system', type: 'server_stop', severity: 'info', summary: `Dashboard backend stopped (${signal})`, sessionId: currentSessionId })
+  clearInterval(webSocketHeartbeat)
   for (const client of clients) client.close(1001, 'Server shutting down')
-  webSocketServer.close()
-  await Promise.all([rpc.stop(), providerLogin.stop(), ...(enabledFeatures.has('workers') ? [workers.shutdown()] : [])])
+  for (const wsServer of allWebSocketServers) wsServer.close()
+  await Promise.all([rpc.stop(), providerLogin.stop(), workerConsoleSession.stop(), ...(enabledFeatures.has('workers') ? [workers.shutdown()] : [])])
   await activity.flush()
   process.exit(0)
 }

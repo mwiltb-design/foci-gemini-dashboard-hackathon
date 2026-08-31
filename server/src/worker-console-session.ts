@@ -16,8 +16,15 @@ export class WorkerConsoleSession {
 
   attach(browser: WebSocket, providerId: string, mode: 'login' | 'manage', cwd: string): void {
     if (this.active) {
-      browser.close(1013, 'A worker console is already open')
-      return
+      // Cloud/browser reconnects can leave an orphaned PTY for a moment. Prefer the newest console.
+      const previous = this.ptyProcess
+      this.ptyProcess = null
+      if (this.browser?.readyState === 1) {
+        try { this.browser.close(1012, 'Replaced by a new worker console') } catch {}
+      }
+      this.browser = null
+      try { previous.kill() } catch {}
+      if (providerId === 'antigravity-cli') syncGeminiAuth('persist')
     }
 
     const env: NodeJS.ProcessEnv = {
@@ -77,6 +84,7 @@ export class WorkerConsoleSession {
       this.browser = browser
       setTimeout(() => {
         if (browser.readyState === 1 /* WebSocket.OPEN */) {
+          browser.send(JSON.stringify({ type: 'ready' }))
           browser.send(JSON.stringify({ type: 'output', data: banner }))
           browser.send(JSON.stringify({ type: 'exit', exitCode: 0 }))
         }
@@ -97,13 +105,32 @@ export class WorkerConsoleSession {
       this.ptyProcess = proc
       this.browser = browser
 
-      proc.onData((data: string) => {
-        if (browser.readyState === 1 /* WebSocket.OPEN */) {
-          browser.send(JSON.stringify({ type: 'output', data }))
+      let outputBuffer = ''
+      let flushTimer: ReturnType<typeof setTimeout> | null = null
+      const flushOutput = () => {
+        flushTimer = null
+        if (!outputBuffer || browser.readyState !== 1 /* WebSocket.OPEN */) return
+        const data = outputBuffer
+        outputBuffer = ''
+        browser.send(JSON.stringify({ type: 'output', data }))
+      }
+      const queueOutput = (data: string) => {
+        outputBuffer += data
+        if (outputBuffer.length >= 2048) {
+          if (flushTimer) clearTimeout(flushTimer)
+          flushOutput()
+        } else if (!flushTimer) {
+          flushTimer = setTimeout(flushOutput, 10)
         }
+      }
+
+      proc.onData((data: string) => {
+        queueOutput(data)
       })
 
       proc.onExit(({ exitCode }: { exitCode: number }) => {
+        if (flushTimer) clearTimeout(flushTimer)
+        flushOutput()
         if (browser.readyState === 1) {
           browser.send(JSON.stringify({ type: 'exit', exitCode }))
         }
@@ -128,6 +155,8 @@ export class WorkerConsoleSession {
       })
 
       browser.on('close', () => {
+        if (flushTimer) clearTimeout(flushTimer)
+        outputBuffer = ''
         if (this.ptyProcess) {
           try { this.ptyProcess.kill() } catch {}
           this.ptyProcess = null
