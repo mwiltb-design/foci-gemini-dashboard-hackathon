@@ -7,6 +7,14 @@ import { homedir } from 'node:os'
 import { dirname, resolve, sep } from 'node:path'
 import { FunctionCallingConfigMode, GoogleGenAI, Type, type Content, type FunctionDeclaration, type Part } from '@google/genai'
 import type { JsonObject, RpcEvent, RpcResponse } from './types.js'
+import {
+  DEFAULT_MEMORY_CHECKPOINT_SETTINGS,
+  memoryCheckpointThresholds,
+  normalizeMemoryCheckpointSettings,
+  normalizeMemoryCheckpointStatus,
+  type MemoryCheckpointSettings,
+  type MemoryCheckpointStatus,
+} from './memory-checkpoint.js'
 
 interface GeminiAgentOptions {
   cwd: string
@@ -510,6 +518,9 @@ export class GeminiAgentProcess extends EventEmitter {
     this.emitEvent({ type: 'message_start', message: userMessage })
     this.emitEvent({ type: 'message_start', message: { role: 'assistant', content: textContent('') } })
 
+    // Track user message and check if scheduled memory consolidation checkpoint is due
+    await this.checkAndRunMemoryCheckpoint(1, 0)
+
     let assistantText = ''
     const MAX_TOTAL_ROUNDS = Number(process.env.FOCI_AGENT_MAX_ROUNDS || 200)
     const MAX_CONSECUTIVE_FAILURES = 5
@@ -600,6 +611,7 @@ export class GeminiAgentProcess extends EventEmitter {
             // SUCCESS RESETS THE FAILURE & REPEAT COUNTERS (PROGRESS ENGINE)
             consecutiveFailures = 0
             identicalActionCount = 0
+            await this.checkAndRunMemoryCheckpoint(0, 1)
           } else {
             hasRoundFailure = true
           }
@@ -722,8 +734,20 @@ export class GeminiAgentProcess extends EventEmitter {
   }
 
   private async systemInstruction(): Promise<string> {
-    const memory = await this.readOptional('MEMORY.md')
-    const user = await this.readOptional('USER.md')
+    const projectMemory = await this.readOptional('MEMORY.md')
+    const agentDir = process.env.PI_AGENT_DIR ?? process.env.FOCI_AGENT_DIR ?? resolve(homedir(), '.pi/agent')
+    let globalMemory = ''
+    let globalUser = ''
+    try {
+      if (existsSync(resolve(agentDir, 'MEMORY.md'))) {
+        globalMemory = await readFile(resolve(agentDir, 'MEMORY.md'), 'utf8')
+      }
+      if (existsSync(resolve(agentDir, 'USER.md'))) {
+        globalUser = await readFile(resolve(agentDir, 'USER.md'), 'utf8')
+      }
+    } catch {}
+    const localUser = await this.readOptional('USER.md')
+    const user = localUser || globalUser
     return [
       '# ROLE & CAPABILITIES',
       'You are Foci Dashboard Lead Orchestrator — an autonomous, senior AI engineer and scientific research lead.',
@@ -738,9 +762,139 @@ export class GeminiAgentProcess extends EventEmitter {
       '   - dashboard_delegate_worker: Delegate focused sub-tasks to `gemini-worker` or `antigravity-cli`.',
       '4. Clear & Authoritative Output: Present your findings clearly using structured Markdown tables, progress checklists, and direct links to output deliverables.',
       '',
-      memory ? `Project MEMORY.md:\n${memory.slice(0, 20_000)}` : '',
-      user ? `Workspace USER.md:\n${user.slice(0, 8_000)}` : '',
+      projectMemory ? `# Project Technical Memory (MEMORY.md):\n${projectMemory.slice(0, 20_000)}` : '',
+      globalMemory ? `# Global Collaboration Memory (MEMORY.md):\n${globalMemory.slice(0, 10_000)}` : '',
+      user ? `# User Profile (USER.md):\n${user.slice(0, 8_000)}` : '',
     ].filter(Boolean).join('\n\n')
+  }
+
+  private async checkAndRunMemoryCheckpoint(userMsgDelta = 0, toolCallDelta = 0): Promise<void> {
+    const agentDir = process.env.PI_AGENT_DIR ?? process.env.FOCI_AGENT_DIR ?? resolve(homedir(), '.pi/agent')
+    const statusPath = resolve(agentDir, 'dashboard/memory-checkpoint/status.json')
+    const settingsPath = resolve(agentDir, 'dashboard/memory-checkpoint/settings.json')
+
+    let settings: MemoryCheckpointSettings = DEFAULT_MEMORY_CHECKPOINT_SETTINGS
+    try {
+      if (existsSync(settingsPath)) {
+        settings = normalizeMemoryCheckpointSettings(JSON.parse(await readFile(settingsPath, 'utf8')))
+      }
+    } catch {}
+
+    if (!settings.enabled) return
+
+    let memoryChars = 0
+    try {
+      const pMem = await this.readOptional('MEMORY.md')
+      memoryChars += pMem.length
+      if (existsSync(resolve(agentDir, 'MEMORY.md'))) {
+        memoryChars += (await readFile(resolve(agentDir, 'MEMORY.md'), 'utf8')).length
+      }
+    } catch {}
+
+    const thresholds = memoryCheckpointThresholds(settings, memoryChars)
+    let status: MemoryCheckpointStatus = {
+      schemaVersion: 1,
+      userMessages: 0,
+      toolCalls: 0,
+      effectiveUserMessages: thresholds.userMessages,
+      effectiveToolCalls: thresholds.toolCalls,
+      reviewDue: false,
+      checkpointRunning: false,
+      updatedAt: new Date().toISOString(),
+    }
+
+    try {
+      if (existsSync(statusPath)) {
+        status = normalizeMemoryCheckpointStatus(JSON.parse(await readFile(statusPath, 'utf8')), thresholds)
+      }
+    } catch {}
+
+    status.userMessages += userMsgDelta
+    status.toolCalls += toolCallDelta
+    status.reviewDue = status.userMessages >= thresholds.userMessages || status.toolCalls >= thresholds.toolCalls
+    status.updatedAt = new Date().toISOString()
+
+    if (status.reviewDue && !status.checkpointRunning) {
+      status.checkpointRunning = true
+      status.userMessages = 0
+      status.toolCalls = 0
+      status.reviewDue = false
+      status.lastCheckpointAt = new Date().toISOString()
+
+      try {
+        await mkdir(dirname(statusPath), { recursive: true })
+        await writeFile(statusPath, JSON.stringify(status, null, 2), 'utf8')
+      } catch {}
+
+      try {
+        await this.runMemoryCheckpointRound()
+      } finally {
+        status.checkpointRunning = false
+        try {
+          await writeFile(statusPath, JSON.stringify(status, null, 2), 'utf8')
+        } catch {}
+      }
+    } else {
+      try {
+        await mkdir(dirname(statusPath), { recursive: true })
+        await writeFile(statusPath, JSON.stringify(status, null, 2), 'utf8')
+      } catch {}
+    }
+  }
+
+  private async runMemoryCheckpointRound(): Promise<void> {
+    if (!this.ai) return
+    const systemInstruction = await this.systemInstruction()
+    const reviewPrompt = `Memory checkpoint. This is a scheduled, lightweight review—not a new development task.
+
+1. Review the useful facts, technical work, and decisions from the recent conversation.
+2. For Global MEMORY.md: If you learned a new cross-project collaboration or communication preference (e.g., how the user prefers answers, explanations, or code formatting), update Global MEMORY.md. Keep it concise.
+3. For Project MEMORY.md: Heavily review and update the active project's technical architecture. Prune out obsolete notes, and record current technical state, folder layout, and key implementation decisions.
+4. If there is nothing worth updating, do nothing.
+5. Report only a brief summary of what was updated.`
+
+    const checkpointContents: Content[] = [
+      ...this.contents.slice(-10),
+      { role: 'user', parts: [{ text: reviewPrompt }] },
+    ]
+
+    try {
+      this.emitEvent({
+        type: 'message_update',
+        assistantMessageEvent: {
+          type: 'text_delta',
+          delta: '\n\n> 🧠 *Performing scheduled memory checkpoint review (updating project & global MEMORY.md)...*\n\n',
+        },
+      })
+
+      const stream = await this.ai.models.generateContentStream({
+        model: this.model,
+        contents: checkpointContents,
+        config: {
+          systemInstruction,
+          tools: [{ functionDeclarations: toolDeclarations }],
+          toolConfig: { functionCallingConfig: { mode: FunctionCallingConfigMode.AUTO } },
+        },
+      })
+
+      const functionCalls: Part[] = []
+      for await (const chunk of stream) {
+        const text = chunk.text ?? ''
+        if (text) {
+          this.emitEvent({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: text } })
+        }
+        for (const part of chunk.candidates?.[0]?.content?.parts ?? []) {
+          if (part.functionCall?.name) functionCalls.push(part)
+        }
+      }
+
+      for (const fc of functionCalls) {
+        if (fc.functionCall?.name) {
+          const args = (fc.functionCall.args ?? {}) as Record<string, unknown>
+          await this.executeTool(fc.functionCall.name, args)
+        }
+      }
+    } catch {}
   }
 
   private async readOptional(path: string): Promise<string> {
