@@ -1284,29 +1284,27 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 
 /* App Previewer */
 .previewer-panel { display: flex; flex-direction: column; min-height: calc(100vh - 108px); }
-.previewer-panel--fullscreen { position: fixed; inset: 0; z-index: 9999; width: 100vw; height: 100vh; min-height: 100vh; border-radius: 0; background: #070a0e; margin: 0 !important; }
 .previewer-panel > .panel__body { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 0; }
 .previewer-viewport-toggle { display: inline-flex; background: #141a21; border: 1px solid var(--line); border-radius: 6px; padding: 2px; gap: 2px; }
 .previewer-viewport-toggle .button { padding: 4px 10px; font-size: 11px; border-radius: 4px; border: none; }
 .previewer-viewport-toggle .button.is-active { background: var(--accent); color: #000; font-weight: 600; }
 
-.previewer-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 14px; background: #141a21; border-bottom: 1px solid var(--line); }
+.previewer-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; background: #141a21; border-bottom: 1px solid var(--line); }
 .previewer-address-form { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 280px; }
 .previewer-url-input { flex: 1; background: #0b0f14; border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; color: #fff; font-size: 12px; font-family: monospace; }
 .previewer-btn-icon { padding: 6px 10px; font-size: 14px; }
 .previewer-presets { display: flex; align-items: center; gap: 6px; }
 
-.previewer-canvas-container { flex: 1; min-height: calc(100vh - 210px); height: 100%; background: #070a0e; display: flex; align-items: center; justify-content: center; padding: 12px; overflow: hidden; }
-.previewer-canvas-container--desktop { padding: 0; }
-.previewer-device-frame { width: 100%; height: 100%; min-height: calc(100vh - 210px); background: #000; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; }
-.previewer-device-frame--desktop { width: 100%; height: 100%; min-height: calc(100vh - 210px); border-radius: 0; border: none; }
-.previewer-device-frame--tablet { width: 768px; max-width: 100%; height: calc(100vh - 240px); min-height: 540px; border: 10px solid #1a222c; border-radius: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
-.previewer-device-frame--mobile { width: 375px; max-width: 100%; height: calc(100vh - 240px); min-height: 640px; border: 10px solid #1a222c; border-radius: 28px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
+.previewer-canvas-container { flex: 1; min-height: calc(100vh - 250px); height: 100%; background: #070a0e; display: flex; align-items: center; justify-content: center; padding: 16px; overflow: auto; }
+.previewer-device-frame { width: 100%; height: 100%; min-height: calc(100vh - 280px); background: #000; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; }
+.previewer-device-frame--desktop { width: 100%; height: 100%; min-height: calc(100vh - 280px); border-radius: 0; }
+.previewer-device-frame--tablet { width: 768px; max-width: 100%; height: calc(100vh - 280px); min-height: 540px; border: 10px solid #1a222c; border-radius: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
+.previewer-device-frame--mobile { width: 375px; max-width: 100%; height: calc(100vh - 280px); min-height: 640px; border: 10px solid #1a222c; border-radius: 28px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
 .previewer-device-header { height: 18px; background: #1a222c; display: flex; align-items: center; justify-content: center; }
 .previewer-device-camera { width: 8px; height: 8px; border-radius: 50%; background: #0b0f14; }
 .previewer-iframe { width: 100%; height: 100%; min-height: 100%; border: none; flex: 1; background: #fff; }
 
-.previewer-guide-footer { padding: 6px 14px; background: #141a21; border-top: 1px solid var(--line); font-size: 11px; color: var(--muted); border-radius: 0 0 11px 11px; }
+.previewer-guide-footer { padding: 8px 14px; background: #141a21; border-top: 1px solid var(--line); font-size: 11px; color: var(--muted); border-radius: 0 0 11px 11px; }
 .previewer-guide-footer code { background: #0b0f14; padding: 2px 5px; border-radius: 4px; color: var(--accent); }
 
 @media (prefers-reduced-motion: reduce) {

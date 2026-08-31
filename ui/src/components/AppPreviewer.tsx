@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+﻿import { useEffect, useState, useRef } from 'react'
 import { apiFetch } from '../api'
 import { Panel } from './Panel'
 
@@ -20,8 +20,6 @@ export function AppPreviewer() {
   const [urlInput, setUrlInput] = useState('')
   const [currentUrl, setCurrentUrl] = useState('')
   const [viewport, setViewport] = useState<DeviceViewport>('desktop')
-  const [zoom, setZoom] = useState<number>(100)
-  const [isFullscreen, setIsFullscreen] = useState(false)
   const [key, setKey] = useState(0)
   const [htmlFiles, setHtmlFiles] = useState<string[]>([])
   const [selectedHtmlFile, setSelectedHtmlFile] = useState<string>('')
@@ -94,30 +92,12 @@ export function AppPreviewer() {
     if (currentUrl) window.open(currentUrl, '_blank', 'noopener,noreferrer')
   }
 
-  const zoomFactor = zoom / 100
-
   return (
     <Panel
       eyebrow="Developer preview"
       title="App & Web Previewer"
       action={
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#141a21', border: '1px solid var(--line)', borderRadius: '6px', padding: '2px 6px' }}>
-            <span style={{ fontSize: '11px', color: 'var(--muted)', fontWeight: 600 }}>🔍 Zoom:</span>
-            {[100, 85, 75, 50].map((z) => (
-              <button
-                key={z}
-                type="button"
-                className={`button button--quiet ${zoom === z ? 'is-active' : ''}`}
-                style={{ fontSize: '11px', padding: '2px 6px' }}
-                onClick={() => setZoom(z)}
-                title={`Scale to ${z}%`}
-              >
-                {z}%
-              </button>
-            ))}
-          </div>
-
           <div className="previewer-viewport-toggle" role="group" aria-label="Device viewport">
             <button
               type="button"
@@ -144,20 +124,10 @@ export function AppPreviewer() {
               📲 Mobile
             </button>
           </div>
-
-          <button
-            type="button"
-            className={`button button--quiet ${isFullscreen ? 'is-active' : ''}`}
-            onClick={() => setIsFullscreen(!isFullscreen)}
-            title={isFullscreen ? 'Exit Fullscreen' : 'Maximize Previewer'}
-            style={{ fontSize: '12px', padding: '4px 8px' }}
-          >
-            {isFullscreen ? '✕ Exit Max' : '⛶ Maximize'}
-          </button>
         </div>
       }
       fullWidth
-      className={`previewer-panel ${isFullscreen ? 'previewer-panel--fullscreen' : ''}`}
+      className="previewer-panel"
     >
       <div className="previewer-toolbar">
         <form onSubmit={handleNavigate} className="previewer-address-form">
@@ -233,31 +203,14 @@ export function AppPreviewer() {
             </div>
           )}
           {currentUrl ? (
-            <div
-              style={{
-                width: '100%',
-                height: '100%',
-                overflow: 'hidden',
-                position: 'relative',
-                flex: 1,
-                display: 'flex',
-              }}
-            >
-              <iframe
-                key={key}
-                ref={iframeRef}
-                src={currentUrl}
-                title="Web App Preview"
-                className="previewer-iframe"
-                style={{
-                  width: `${100 / zoomFactor}%`,
-                  height: `${100 / zoomFactor}%`,
-                  transform: `scale(${zoomFactor})`,
-                  transformOrigin: 'top left',
-                }}
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-              />
-            </div>
+            <iframe
+              key={key}
+              ref={iframeRef}
+              src={currentUrl}
+              title="Web App Preview"
+              className="previewer-iframe"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+            />
           ) : (
             <div style={{ padding: '32px', textAlign: 'center', color: 'var(--muted)' }}>
               <h3>No Preview Selected</h3>
@@ -269,7 +222,7 @@ export function AppPreviewer() {
 
       <div className="previewer-guide-footer">
         <p>
-          💡 <strong>Viewing Local HTML Files:</strong> Select any <code>.html</code> file in your project workspace from the dropdown above, or type its path (e.g. <code>my-folder/index.html</code>) and click <strong>Go</strong>. Use the <strong>Zoom (100% / 85% / 75% / 50%)</strong> and <strong>⛶ Maximize</strong> controls for spacious viewing on laptops.
+          💡 <strong>Viewing Local HTML Files:</strong> Select any <code>.html</code> file in your project workspace from the dropdown above, or type its path (e.g. <code>my-folder/index.html</code>) and click <strong>Go</strong>.
         </p>
       </div>
     </Panel>
