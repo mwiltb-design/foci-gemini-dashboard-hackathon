@@ -242,11 +242,12 @@ export function SkillBrowser({ revision, mode, plugins, onCreateWithPi }: {
     <>
       <Panel
         eyebrow={installed ? 'Gemini instruction catalog' : 'Discoverable instruction packages'}
-        title={installed ? 'Installed Skills' : 'Available Skills'}
-        action={installed
-          ? <button className="button button--quiet" type="button" onClick={browser.refresh}>↻ Refresh</button>
-          : <button className="button button--primary" type="button" onClick={() => setAddOpen(true)}>＋ Add skill</button>}
-        fullWidth
+        action={
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button className="button button--quiet" type="button" onClick={browser.refresh}>↻ Refresh</button>
+            <button className="button button--primary" type="button" onClick={() => setAddOpen(true)}>＋ Add Skill</button>
+          </div>
+        }
       >
         <div className="panel__body">
           <div className="metrics">
