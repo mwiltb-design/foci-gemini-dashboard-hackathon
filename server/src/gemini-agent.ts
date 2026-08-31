@@ -99,12 +99,12 @@ const toolDeclarations: FunctionDeclaration[] = [
   },
   {
     name: 'dashboard_delegate_worker',
-    description: 'Delegate an autonomous sub-agent task to a background worker (providerId: "gemini-worker" or "antigravity-cli", mode: "research", "review", or "implement").',
+    description: 'PRIMARY EXECUTION BUS: Delegate heavy coding, multi-step script execution, file manipulation, research, and data processing tasks to an isolated background worker (providerId: "gemini-worker" or "antigravity-cli", mode: "research", "review", or "implement") to preserve the main orchestrator context.',
     parameters: {
       type: Type.OBJECT,
       properties: {
-        providerId: { type: Type.STRING, description: 'Worker provider ID: "gemini-worker" or "antigravity-cli"' },
-        mode: { type: Type.STRING, description: 'Worker mode: "research", "review", or "implement"' },
+        providerId: { type: Type.STRING, description: 'Worker provider ID: "gemini-worker" (default) or "antigravity-cli"' },
+        mode: { type: Type.STRING, description: 'Worker mode: "implement" (for coding/running pipelines), "research" (for file investigation/web search), or "review" (for code auditing)' },
         prompt: { type: Type.STRING, description: 'Detailed, actionable task prompt for the worker' },
         bounds: {
           type: Type.OBJECT,
@@ -749,18 +749,16 @@ export class GeminiAgentProcess extends EventEmitter {
     const localUser = await this.readOptional('USER.md')
     const user = localUser || globalUser
     return [
-      '# ROLE & CAPABILITIES',
-      'You are Foci Dashboard Lead Orchestrator — an autonomous, senior AI engineer and scientific research lead.',
-      'You operate directly inside the user\'s project workspace with full access to terminal commands, Python 3.11 geospatial tools, file manipulation, and background workers.',
+      '# ROLE & EXECUTIVE ORCHESTRATION MANDATE',
+      'You are Foci Dashboard Lead Orchestrator — an autonomous, senior AI engineer and executive scientific research lead.',
+      'Your primary role is to PLAN, ARCHITECT, COORDINATE, and SUPERVISE. You operate as an Executive Lead, NOT a raw task laborer.',
       '',
-      '# CORE BEHAVIORS & INITIATIVE',
-      '1. Take Proactive Action: When given a goal or instruction, do not just explain what could be done — actively execute the required tools, inspect files, run the scripts, and produce concrete deliverables.',
-      '2. End-to-End Problem Solving: If a script, command, or data download encounters an error, read the exact error output, diagnose the cause, inspect/modify the relevant files, and re-run. Never give up or repeat failing actions blindly.',
-      '3. Full Tool Mastery:',
-      '   - run_command: Run Python pipelines (`python3 ...`), git operations, USGS data downloads, tests, and build commands directly in the workspace.',
-      '   - read_file / write_file / list_directory: Inspect and modify code, configurations, data manifests, and HTML reports.',
-      '   - dashboard_delegate_worker: Delegate focused sub-tasks to `gemini-worker` or `antigravity-cli`.',
-      '4. Clear & Authoritative Output: Present your findings clearly using structured Markdown tables, progress checklists, and direct links to output deliverables.',
+      '# DELEGATION-FIRST WORKFLOW (CRITICAL)',
+      '1. Delegate Heavy Lifting: Whenever a task requires multi-step code generation, running complex scripts/pipelines, downloading datasets, or deep research, you MUST delegate it to a background worker using `dashboard_delegate_worker`.',
+      '2. Context Preservation: Protect your orchestration context window from noisy logs and massive file dumps by letting worker agents execute isolated work sessions.',
+      '3. Live Progress Updates: When delegating a task, ALWAYS keep the user informed in your response before or alongside delegating (e.g., "🔄 Delegating task to `gemini-worker` (mode: implement)... waiting on response").',
+      '4. Synthesis & Deliverables: Once the worker completes its sub-task, inspect the returned output, verify the result, and present a clean, high-level summary with Markdown tables and direct links to output artifacts.',
+      '5. Quick Actions: You may still use `read_file`, `write_file`, or quick `run_command` directly for lightweight checks, status verifications, or single-file inspections.',
       '',
       projectMemory ? `# Project Technical Memory (MEMORY.md):\n${projectMemory.slice(0, 20_000)}` : '',
       globalMemory ? `# Global Collaboration Memory (MEMORY.md):\n${globalMemory.slice(0, 10_000)}` : '',
